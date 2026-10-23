@@ -4,7 +4,7 @@ import { ArrowRight, Info, TriangleAlert } from "lucide-react";
 import * as React from "react";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatDate } from "@/business/dates";
-import { pct, units, weeks } from "@/business/format";
+import { pct, rupees, units, weeks } from "@/business/format";
 import { ACTION_LABEL } from "@/business/labels";
 import type { Recommendation } from "@/business/types";
 import { cn, formatTime, shortDistributor } from "@/lib/utils";
@@ -150,6 +150,8 @@ function DetailBody({ rec }: { rec: Recommendation }) {
         />
       </section>
 
+      <MoneyAndTiming rec={rec} />
+
       <CoverageBar rec={rec} />
 
       {/* Triggered rules */}
@@ -278,6 +280,51 @@ function CoverageBar({ rec }: { rec: Recommendation }) {
           {rec.window.max}
         </span>
         <span className="absolute right-0">{max} wks</span>
+      </div>
+    </section>
+  );
+}
+
+const longDay = (iso: string) => formatDate(iso, { weekday: "short", day: "numeric", month: "short" });
+
+/** When it runs out, when an order placed today lands, and the ₹ at stake. */
+function MoneyAndTiming({ rec }: { rec: Recommendation }) {
+  const e = rec.economics;
+  if (!e.runOutDate && e.valueAtRisk === null && e.marginPerUnit === null) return null;
+  const steps = [
+    { label: "Stock as of", date: e.asOfDate, tone: "bg-ink-3" },
+    ...(e.arrivalIfOrderedToday ? [{ label: "Order today arrives", date: e.arrivalIfOrderedToday, tone: "bg-approved" }] : []),
+    ...(e.runOutDate ? [{ label: "Runs out", date: e.runOutDate, tone: "bg-stockout" }] : []),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+  return (
+    <section>
+      <h3 className="text-[13px] font-semibold">Money and timing</h3>
+      <ol className="mt-2 flex flex-wrap items-center gap-2 text-[12.5px]">
+        {steps.map((s, i) => (
+          <li key={s.label} className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 rounded-[4px] border border-line bg-surface px-2 py-1">
+              <span className={cn("size-2 rounded-full", s.tone)} />
+              <span className="text-ink-3">{s.label}</span> <span className="font-semibold">{longDay(s.date)}</span>
+            </span>
+            {i < steps.length - 1 && <span className="text-ink-3">→</span>}
+          </li>
+        ))}
+      </ol>
+      {(e.stockoutGapDays ?? 0) > 0 && (
+        <p className="mt-2 text-[13px] font-medium text-stockout">
+          Even ordered today, there will be {e.stockoutGapDays} day{e.stockoutGapDays === 1 ? "" : "s"} with no stock. Consider an expedited order or a smaller emergency top-up.
+        </p>
+      )}
+      <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line sm:grid-cols-4">
+        <Metric label="Unit cost" value={rupees(e.unitCost)} sub="per unit" />
+        <Metric label="Margin" value={rupees(e.marginPerUnit)} sub={e.sellingPrice !== null ? `sells at ${rupees(e.sellingPrice)}` : "per unit"} />
+        <Metric label="Lead time" value={e.leadTimeDays === null ? "—" : `${e.leadTimeDays} days`} sub="order to arrival" />
+        <Metric
+          label={e.valueKind === "CASH_TIED_UP" ? "Cash tied up" : "Margin at risk"}
+          value={rupees(e.valueAtRisk)}
+          sub={e.valueKind === "MARGIN_AT_RISK" ? `${units(e.shortfallUnits)} units short of ${rec.window.min} wks` : e.valueKind === "CASH_TIED_UP" ? `${units(e.excessUnits)} units above ${rec.window.max} wks` : "within range"}
+          tone={e.valueKind === "MARGIN_AT_RISK" ? "text-stockout" : e.valueKind === "CASH_TIED_UP" ? "text-overstock" : undefined}
+        />
       </div>
     </section>
   );

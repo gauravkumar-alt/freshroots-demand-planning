@@ -22,6 +22,7 @@ const TYPE: Record<AuditEventType, { label: string; cls: string }> = {
   KILL_SWITCH: { label: "Kill switch", cls: "bg-rejected text-white" },
   KILL_SWITCH_RESUMED: { label: "Resumed", cls: "bg-review-bg text-review" },
   EMAIL_SENT: { label: "Email", cls: "bg-info-bg text-info" },
+  DIGEST_SENT: { label: "Digest", cls: "bg-info-bg text-info" },
 };
 
 const act = (a: AuditEntry["finalAction"], q: number | null) => (a ? `${ACTION_LABEL[a]}${q ? ` — ${units(q)} units` : ""}` : "—");

@@ -2,7 +2,7 @@
 
 import { Download, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { units } from "@/business/format";
+import { rupees, units } from "@/business/format";
 import { cn, downloadText, formatTime, shortDistributor } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ActionText, PoStatus, StatusBadge } from "./RuleBadge";
@@ -17,6 +17,8 @@ export function ProcurementQueue() {
   const reorders = items.filter((i) => i.po.kind !== "NOT_NEEDED");
   const created = reorders.filter((i) => i.po.kind === "CREATED");
   const units_ = reorders.reduce((s, i) => s + (i.entry.finalQty ?? 0), 0);
+  const spend = reorders.reduce((s, i) => s + (i.entry.finalQty ?? 0) * (i.rec.economics.unitCost ?? 0), 0);
+  const hasCost = reorders.some((i) => i.rec.economics.unitCost !== null);
   const halted = !!store.killSwitch?.active;
   const retryable = reorders.filter((i) => i.po.kind === "HELD" || i.po.kind === "FAILED");
 
@@ -30,7 +32,7 @@ export function ProcurementQueue() {
     <Card>
       <CardHeader
         title="Procurement queue"
-        description={`${items.length} approved · ${reorders.length} reorders (${units(units_)} units) · ${created.length} POs raised in Zoho${store.integrations?.zoho ? "" : " (simulated: no Zoho credentials)"}`}
+        description={`${items.length} approved · ${reorders.length} reorders (${units(units_)} units${hasCost ? `, ${rupees(spend)} at cost` : ""}) · ${created.length} POs raised in Zoho${store.integrations?.zoho ? "" : " (simulated: no Zoho credentials)"}`}
         action={
           <>
             {retryable.length > 0 && (
@@ -68,6 +70,7 @@ export function ProcurementQueue() {
               <Th>Action</Th>
               <Th align="right">Approved qty</Th>
               <Th align="right">System qty</Th>
+              <Th align="right">Order value</Th>
               <Th>Decision</Th>
               <Th>Approved</Th>
               <Th>Reason</Th>
@@ -93,6 +96,7 @@ export function ProcurementQueue() {
                 <Td align="right" className={cn("text-ink-3", entry.finalQty !== rec.suggestedQty && "line-through")}>
                   {rec.suggestedQty === null ? "—" : units(rec.suggestedQty)}
                 </Td>
+                <Td align="right">{rec.economics.unitCost !== null && entry.finalQty ? rupees(entry.finalQty * rec.economics.unitCost) : "—"}</Td>
                 <Td>
                   <StatusBadge status={entry.type === "EDITED" ? "EDITED" : "APPROVED"} />
                 </Td>

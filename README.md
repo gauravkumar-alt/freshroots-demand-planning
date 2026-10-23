@@ -21,6 +21,15 @@ Decisions, the audit log, uploaded files, retired rubric notes and quarter outco
 
 Without them the server keeps everything in memory and the app shows a "not saved" banner.
 
+## What the owner sees
+
+- **Home: this week.** ₹ margin at risk, ₹ cash tied up in overstock, decisions waiting (urgent = runs out before an order placed today can arrive) and forecast accuracy, then a decision inbox ranked by ₹. Routine rule-based calls can be approved in one batch; urgent ones are left for a deliberate look.
+- **Run-out dates.** Each SKU shows when it runs out (from the stock snapshot) and when an order placed today would arrive (from the SKU master's lead time).
+- **Outcomes** (Audit Log → Outcomes). The weekly forecast back-tested against actual sales, and each past decision checked against the following week's sales: did Raghav's override beat the rules?
+- **Monday digest.** Emailed every Monday 08:00 IST (`vercel.json` cron, protected by `CRON_SECRET`), or on demand from the home screen (once per 10 minutes).
+
+₹ figures need `Unit_Cost`, `Selling_Price` and `Lead_Time_Days` columns in the SKU master. The bundled sample has placeholder values for these.
+
 ## Integrations
 
 Copy `.env.example` to `.env.local`. Each integration runs as a labelled simulation until its keys are set.

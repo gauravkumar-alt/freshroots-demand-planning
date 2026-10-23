@@ -48,6 +48,9 @@ export const FILE_SPECS: Record<FileKind, { label: string; system: "SAP" | "Zoho
       { key: "perishability", label: "Perishability", aliases: ["perishability", "perishable", "shelflifeclass"], required: true },
       { key: "standardOrderQty", label: "Standard order quantity", aliases: ["standardorderquantity", "standardorderqty", "standardreorderqty", "standardreorderquantity", "soq", "moq"], required: true },
       { key: "distributorId", label: "Distributor", aliases: ["distributorid", "distributor", "distributorcode"], required: false },
+      { key: "unitCost", label: "Unit cost (₹)", aliases: ["unitcost", "cost", "costprice", "landedcost", "unitcostinr"], required: false },
+      { key: "sellingPrice", label: "Selling price (₹)", aliases: ["sellingprice", "price", "unitprice", "distributorprice", "sellingpriceinr"], required: false },
+      { key: "leadTimeDays", label: "Lead time (days)", aliases: ["leadtimedays", "leadtime", "supplierleadtime", "supplierleadtimedays"], required: false },
     ],
   },
   purchaseOrders: {
@@ -269,7 +272,32 @@ export function validateAndPrepare(files: Partial<Record<FileKind, RawFile>>): V
       return false;
     }
     masterSeen.add(id);
-    const row_: SkuMasterRow = { sku: id, product: get("product"), category: get("category"), perishability: per, standardOrderQty: soq, distributorId: get("distributorId") || null };
+    const optionalNumber = (key: string, label: string): number | null => {
+      if (!get(key)) return null;
+      const n = parseNumber(get(key));
+      if (n === null || n < 0) {
+        issues.push({ severity: "warning", file: "skuMaster", row, sku: id, code: "INVALID_NUMBER", message: `Row ${row}: ${label} "${get(key)}" is not a valid number. Treated as unknown.` });
+        return null;
+      }
+      return n;
+    };
+    const unitCost = optionalNumber("unitCost", "unit cost");
+    const sellingPrice = optionalNumber("sellingPrice", "selling price");
+    const leadTimeDays = optionalNumber("leadTimeDays", "lead time");
+    if (unitCost !== null && sellingPrice !== null && sellingPrice < unitCost) {
+      issues.push({ severity: "warning", file: "skuMaster", row, sku: id, code: "NEGATIVE_MARGIN", message: `Row ${row}: ${id} sells below cost (₹${sellingPrice} vs ₹${unitCost}).` });
+    }
+    const row_: SkuMasterRow = {
+      sku: id,
+      product: get("product"),
+      category: get("category"),
+      perishability: per,
+      standardOrderQty: soq,
+      distributorId: get("distributorId") || null,
+      unitCost,
+      sellingPrice,
+      leadTimeDays,
+    };
     masterBySku.set(id, row_);
     clean.skuMaster.push(row_);
     return true;

@@ -15,6 +15,9 @@ export const env = {
   resendKey: () => process.env.RESEND_API_KEY || "",
   emailFrom: () => process.env.EMAIL_FROM || "Freshroots Planning <onboarding@resend.dev>",
   killSwitchEmail: () => process.env.KILL_SWITCH_EMAIL || "",
+  /** Monday digest recipient; defaults to the kill-switch address. */
+  digestEmail: () => process.env.DIGEST_EMAIL || process.env.KILL_SWITCH_EMAIL || "",
+  cronSecret: () => process.env.CRON_SECRET || "",
   appUrl: () =>
     process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3400"),
 };

@@ -2,7 +2,8 @@
 
 import { ArrowDownRight, ArrowUpRight, Check, Minus, Search } from "lucide-react";
 import * as React from "react";
-import { pct, units, weeks } from "@/business/format";
+import { formatDate } from "@/business/dates";
+import { pct, rupees, units, weeks } from "@/business/format";
 import { RISK_LABEL, STATUS_LABEL } from "@/business/labels";
 import type { DecisionStatus, Recommendation, RiskLevel } from "@/business/types";
 import { cn, shortDistributor } from "@/lib/utils";
@@ -168,6 +169,8 @@ export function RecommendationTable({ filters, setFilters }: { filters: TableFil
               <Th align="right">4-wk avg</Th>
               <Th align="right">12-wk avg</Th>
               <Th align="right">Wks stock</Th>
+              <Th>Runs out</Th>
+              <Th align="right">₹ at stake</Th>
               <Th>Risk</Th>
               <Th>Recommendation</Th>
               <Th align="right">Qty</Th>
@@ -211,6 +214,13 @@ export function RecommendationTable({ filters, setFilters }: { filters: TableFil
                   <Td align="right" className={r.risk === "STOCKOUT" ? "font-semibold text-stockout" : r.risk === "OVERSTOCK" ? "font-semibold text-overstock" : ""}>
                     {weeks(r.weeksOfStock)}
                     {r.window.kind === "perishable" && <span className="block text-[10.5px] font-normal text-ink-3">target 3–4</span>}
+                  </Td>
+                  <Td className="whitespace-nowrap text-[12.5px]">
+                    {r.economics.runOutDate ? formatDate(r.economics.runOutDate, { weekday: "short", day: "numeric", month: "short" }) : "—"}
+                    {(r.economics.stockoutGapDays ?? 0) > 0 && <span className="block text-[11px] font-semibold text-stockout">before delivery</span>}
+                  </Td>
+                  <Td align="right" className={r.economics.valueKind === "MARGIN_AT_RISK" ? "text-stockout" : r.economics.valueKind === "CASH_TIED_UP" ? "text-overstock" : "text-ink-3"}>
+                    {rupees(r.economics.valueAtRisk)}
                   </Td>
                   <Td>
                     <div className="flex flex-col items-start gap-1">

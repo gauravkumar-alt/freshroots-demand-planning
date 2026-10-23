@@ -1,7 +1,8 @@
 import { calculateDemand, hasEnoughHistory } from "./demandCalculator";
+import { computeEconomics } from "./economics";
 import { addDays, daysBetween, formatDate, isoWeek } from "./dates";
 import { festivalInfo } from "./festivalAdjustment";
-import { pct, units, weeks } from "./format";
+import { pct, rupees, units, weeks } from "./format";
 import { purchaseOrderContext, weeksOfStock } from "./inventoryCalculator";
 import { coveragePosition, inventoryWindow } from "./perishabilityRules";
 import { RULES } from "./rulesConfig";
@@ -26,6 +27,8 @@ export function evaluateSku(
   analysisWeek: string,
   notes: RubricNote[] = [],
   calendar: Record<string, boolean> | null = null,
+  asOfDate: string = analysisWeek,
+  orderDate: string = asOfDate,
 ): Recommendation {
   const { master } = sku;
   const demand = calculateDemand(sku.weekly);
@@ -140,18 +143,18 @@ export function evaluateSku(
     if (n.sku === master.sku) judgement.push(`Rubric note from your rejection in ${n.fromRunId}: “${n.reason}”`);
   }
 
+  const economics = computeEconomics({ master, currentStock: sku.currentStock, weeklyDemand: adjustedDemand, window, openPoQty: po.openQty, asOfDate, orderDate });
+
   const priority: Recommendation["priority"] =
     risk === "STOCKOUT" ? 1 : risk === "MANUAL_REVIEW" || risk === "HIGH_DEMAND" || judgement.length ? 2 : risk === "OVERSTOCK" ? 3 : 4;
-  const priorityScore =
-    (risk === "STOCKOUT"
-      ? 1000 - (wos ?? 0) * 20
-      : risk === "MANUAL_REVIEW"
-        ? 700
-        : risk === "HIGH_DEMAND"
-          ? 600 + (demand.demandChange ?? 0) * 100
-          : risk === "OVERSTOCK"
-            ? 400 + Math.min(wos ?? 0, 60)
-            : 100) + (judgement.length ? 50 : 0);
+  // Bands follow the documented priority. Within a band: runs out before an order could land first,
+  // then by ₹ at stake when cost and price are known, otherwise by the old weeks-of-stock / demand ordering.
+  const band = risk === "STOCKOUT" ? 4000 : risk === "MANUAL_REVIEW" ? 3000 : risk === "HIGH_DEMAND" ? 2500 : risk === "OVERSTOCK" ? 2000 : 0;
+  const fallback =
+    risk === "STOCKOUT" ? 100 - (wos ?? 0) * 5 : risk === "HIGH_DEMAND" ? (demand.demandChange ?? 0) * 100 : risk === "OVERSTOCK" ? Math.min(wos ?? 0, 60) : 0;
+  const imminent = risk === "STOCKOUT" && (economics.stockoutGapDays ?? 0) > 0 ? 600 : 0;
+  const money = economics.valueAtRisk !== null ? 100 + Math.min(economics.valueAtRisk / 1000, 499) : fallback;
+  const priorityScore = band + imminent + money + (judgement.length ? 50 : 0);
 
   const firstIdx = sku.weekly.findIndex((v) => v !== null);
   const trend = weeksIndex
@@ -184,6 +187,7 @@ export function evaluateSku(
     nextDelivery: po.nextDelivery,
     lastOrderQty: po.lastOrderQty,
     lastOrderDate: po.lastOrderDate,
+    economics,
     triggered: hits,
     risk,
     action,
@@ -252,14 +256,21 @@ function distributorShares(byDistributor: Record<string, number[]>): Distributor
     .sort((a, b) => b.avg4 - a.avg4 || b.avg12 - a.avg12);
 }
 
+const day = (iso: string) => formatDate(iso, { weekday: "short", day: "numeric", month: "short" });
+
 function headlineFor(r: Recommendation, zeroSales: boolean): string {
   switch (r.risk) {
     case "MANUAL_REVIEW":
       return zeroSales ? "No recent sales — Manual review required" : "Insufficient data — Manual review required";
-    case "STOCKOUT":
-      return `Stock covers ${weeks(r.weeksOfStock)} weeks against a ${r.window.min}-week minimum${
-        r.triggered.some((h) => h.code === "HIGH_DEMAND") ? `, with demand ${pct(r.demandChange)}` : ""
+    case "STOCKOUT": {
+      const e = r.economics;
+      if (e.runOutDate && e.stockoutGapDays) {
+        return `Runs out ${day(e.runOutDate)}, ${e.stockoutGapDays} day${e.stockoutGapDays === 1 ? "" : "s"} before an order placed today can arrive`;
+      }
+      return `${e.runOutDate ? `Runs out ${day(e.runOutDate)}: ` : ""}${weeks(r.weeksOfStock)} weeks of stock against a ${r.window.min}-week minimum${
+        r.triggered.some((h) => h.code === "HIGH_DEMAND") ? `, demand ${pct(r.demandChange)}` : ""
       }`;
+    }
     case "HIGH_DEMAND":
       return `Demand ${pct(r.demandChange)} on the 12-week average`;
     case "OVERSTOCK":
@@ -305,6 +316,21 @@ function explanationFor(r: Recommendation, highDemand: boolean): string[] {
     default:
       lines.push("No order change needed this week.");
   }
+  const e = r.economics;
+  if (e.runOutDate) {
+    lines.push(
+      `At ${units(r.adjustedDemand)} units/week, stock runs out ${day(e.runOutDate)}.${
+        e.arrivalIfOrderedToday
+          ? ` An order placed today arrives ${day(e.arrivalIfOrderedToday)} (${e.leadTimeDays}-day lead time)${e.stockoutGapDays ? `, leaving ${e.stockoutGapDays} day${e.stockoutGapDays === 1 ? "" : "s"} without stock` : ""}.`
+          : ""
+      }`,
+    );
+  }
+  if (e.valueKind === "MARGIN_AT_RISK") {
+    lines.push(`Reaching the ${r.window.min}-week minimum needs ${units(e.shortfallUnits)} more units; at ${rupees(e.marginPerUnit)} margin each, ${rupees(e.valueAtRisk)} of margin is at risk.`);
+  } else if (e.valueKind === "CASH_TIED_UP") {
+    lines.push(`${units(e.excessUnits)} units sit above the ${r.window.max}-week maximum, tying up ${rupees(e.valueAtRisk)} at cost.`);
+  }
   if (r.openPoQty > 0 && r.nextDelivery) {
     lines.push(`Zoho shows ${units(r.openPoQty)} units on open orders, next delivery ${formatDate(r.nextDelivery, { day: "numeric", month: "short" })}.`);
   }
@@ -324,8 +350,10 @@ export function runIdFor(analysisWeek: string): string {
 export function runAnalysis(dataset: PreparedDataset, ranAt: string = new Date().toISOString(), notes: RubricNote[] = []): AnalysisResult {
   const runId = runIdFor(dataset.analysisWeek);
   const active = activeRubricNotes(notes, runId);
+  // Orders are placed on the day the analysis runs (IST), so arrival dates count from then.
+  const orderDate = new Date(ranAt).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const recommendations = dataset.skus
-    .map((s) => evaluateSku(s, dataset.weeks, dataset.analysisWeek, active, dataset.festivalCalendar))
+    .map((s) => evaluateSku(s, dataset.weeks, dataset.analysisWeek, active, dataset.festivalCalendar, dataset.asOfDate ?? dataset.analysisWeek, orderDate))
     .sort((a, b) => b.priorityScore - a.priorityScore);
   return {
     runId,

@@ -12,6 +12,11 @@ export interface SkuMasterRow {
   standardOrderQty: number;
   /** Distributor that carries the SKU, when the master names one. */
   distributorId?: string | null;
+  /** ₹ per unit. Optional: without cost and price the app shows units only. */
+  unitCost?: number | null;
+  sellingPrice?: number | null;
+  /** Days from placing a purchase order to stock arriving. */
+  leadTimeDays?: number | null;
 }
 
 /** SAP: weekly distributor-level sales. `week` is the ISO date of the week-ending Sunday. */
@@ -150,6 +155,9 @@ export interface Recommendation {
   lastOrderQty: number | null;
   lastOrderDate: string | null;
 
+  /** Money and dates. Null where the SKU master has no cost, price or lead time. */
+  economics: Economics;
+
   triggered: RuleHit[];
   risk: RiskLevel;
   action: ActionCode;
@@ -163,6 +171,28 @@ export interface Recommendation {
 
   headline: string;
   explanation: string[];
+}
+
+export interface Economics {
+  unitCost: number | null;
+  sellingPrice: number | null;
+  marginPerUnit: number | null;
+  leadTimeDays: number | null;
+  /** Stock snapshot date the dates count from. */
+  asOfDate: string;
+  /** When stock runs out at the festival-adjusted rate. */
+  runOutDate: string | null;
+  /** When an order placed today would arrive. */
+  arrivalIfOrderedToday: string | null;
+  /** Days with no stock between running out and that arrival (0 = none). */
+  stockoutGapDays: number | null;
+  /** Units needed to reach the bottom of the target window (after open POs). */
+  shortfallUnits: number;
+  /** Units held above the top of the target window. */
+  excessUnits: number;
+  /** ₹ margin lost if the cover gap is not closed (stockout), or ₹ cash tied up above the window (overstock). */
+  valueAtRisk: number | null;
+  valueKind: "MARGIN_AT_RISK" | "CASH_TIED_UP" | null;
 }
 
 export interface AnalysisResult {
@@ -210,7 +240,8 @@ export type AuditEventType =
   | "PO_HELD"
   | "KILL_SWITCH"
   | "KILL_SWITCH_RESUMED"
-  | "EMAIL_SENT";
+  | "EMAIL_SENT"
+  | "DIGEST_SENT";
 
 export interface AuditEntry {
   id: string;
