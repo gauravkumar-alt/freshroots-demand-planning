@@ -26,6 +26,16 @@ export interface DecisionItem {
   input: DecisionInput;
 }
 
+/** Gives each event in a batch a strictly later timestamp, so the audit log always reads in the order things happened. */
+function inOrder(batch: AuditEntry[], after: string | null): AuditEntry[] {
+  let last = after ? Date.parse(after) : 0;
+  return batch.map((e) => {
+    const t = Math.max(Date.parse(e.timestamp), last + 1);
+    last = t;
+    return { ...e, timestamp: new Date(t).toISOString() };
+  });
+}
+
 const isReorder = (e: AuditEntry) => e.finalAction === "IMMEDIATE_REORDER" || e.finalAction === "REORDER_1_5X";
 const sorted = (list: AuditEntry[]) => [...list].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
@@ -95,8 +105,9 @@ export async function recordDecisions(repo: Repo, ctx: RunContext, items: Decisi
         runAudit = sorted([po, ...runAudit]);
       }
     }
-    await repo.append(batch);
-    created.push(...batch);
+    const ordered = inOrder(batch, created.length ? created[created.length - 1].timestamp : null);
+    await repo.append(ordered);
+    created.push(...ordered);
     results.push({ sku: rec.sku, ok: true });
   }
   return { results, entries: created };
@@ -110,8 +121,9 @@ export async function retryPurchaseOrder(repo: Repo, ctx: RunContext, rec: Recom
   if (!decision || decision.type === "REJECTED") return { ok: false as const, error: "No approved decision for this SKU." };
   const created = runAudit.find((e) => e.sku === rec.sku && e.type === "PO_CREATED" && e.timestamp >= decision.timestamp);
   if (created) return { ok: false as const, error: `PO ${created.reference} already exists.` };
-  const po = await raisePo(rec, decision, ctx, false, deps);
-  if (!po) return { ok: false as const, error: "This decision needs no PO." };
+  const raised = await raisePo(rec, decision, ctx, false, deps);
+  if (!raised) return { ok: false as const, error: "This decision needs no PO." };
+  const [po] = inOrder([raised], decision.timestamp);
   await repo.append([po]);
   return { ok: true as const, entries: [po] };
 }

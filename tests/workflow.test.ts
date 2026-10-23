@@ -69,3 +69,13 @@ describe("Approve → threshold check → PO on Zoho (server workflow)", () => {
     expect(d.sendKillSwitchEmail).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Audit order", () => {
+  it("stores each step of a decision strictly after the previous one", async () => {
+    const repo = new MemoryRepo();
+    const res = await recordDecisions(repo, ctx, [{ rec: rec("SKU001"), input: { kind: "APPROVE" } }, { rec: rec("SKU003"), input: { kind: "APPROVE" } }], deps());
+    const times = res.entries.map((e) => e.timestamp);
+    expect(res.entries.map((e) => e.type)).toEqual(["APPROVED", "PO_CREATED", "APPROVED", "PO_CREATED"]);
+    for (let i = 1; i < times.length; i++) expect(times[i] > times[i - 1]).toBe(true);
+  });
+});
