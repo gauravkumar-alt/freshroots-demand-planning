@@ -208,7 +208,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setAnalysis(a);
           setAnalysisFiles(uploadsKey(s.uploads));
           if (!s.audit.some((e) => e.runId === a.runId && e.type === "ANALYSIS_RUN")) {
-            const run = auditEvent("ANALYSIS_RUN", a.runId, "System", `Weekly analysis: ${a.recommendations.length} SKUs from the current files.`, { timestamp: a.ranAt });
+            // Fixed id per week: if two people open the app at once, the database keeps only one.
+            const run = auditEvent("ANALYSIS_RUN", a.runId, "System", `Weekly analysis: ${a.recommendations.length} SKUs from the current files.`, {
+              timestamp: a.ranAt,
+              id: `${a.runId}-ANALYSIS_RUN-first`,
+            });
             await api("/api/events", { method: "POST", body: JSON.stringify({ entries: [run] }) })
               .then(() => setAudit((l) => [run, ...l]))
               .catch(() => {});
