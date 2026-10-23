@@ -16,7 +16,7 @@ function deps() {
   let n = 0;
   return {
     createPurchaseOrder: vi.fn(async () => ({ ok: true, mode: "simulated" as const, poNumber: `SIM-PO-${++n}` })),
-    sendKillSwitchEmail: vi.fn(async () => ({ ok: true, mode: "live" as const, to: "gaurav_kumar@pg27.mesaschool.co", subject: "Kill switch fired", id: "email-1" })),
+    sendKillSwitchEmail: vi.fn(async () => ({ ok: true, mode: "live" as const, to: "planner@example.com", subject: "Kill switch fired", id: "email-1" })),
   } satisfies WorkflowDeps;
 }
 
