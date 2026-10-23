@@ -63,3 +63,6 @@ alter table fr_audit_events enable row level security;
 alter table fr_uploads enable row level security;
 alter table fr_retired_notes enable row level security;
 alter table fr_quarter_outcomes enable row level security;
+
+-- Make the API see the new tables immediately.
+notify pgrst, 'reload schema';
