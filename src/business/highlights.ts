@@ -57,7 +57,8 @@ Rules:
 - Use only numbers that appear in the facts, written exactly as given. Never calculate new totals, averages or percentages.
 - Never recommend a different action or quantity than the facts show. You describe; the rules decide.
 - Each highlight: a title under 70 characters, one or two plain sentences of detail, the SKU codes it covers, and a tone: risk (stockout), demand (rising demand), excess (overstock) or info.
-- Plain operational English. No hype.`;
+- Plain operational English. No hype. Never write the facts' field names (weeksOfStock, demandChange, avg4, action…); say "1.8 weeks of stock", "demand up 21.4%", "4-week average of 261 units".
+- Refer to products by name without the "Freshroots" brand prefix.`;
 
 export const HIGHLIGHT_SCHEMA = {
   type: "object",
