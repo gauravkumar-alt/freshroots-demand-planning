@@ -39,8 +39,9 @@ export function KillSwitchBanner() {
               <Button
                 variant="primary"
                 disabled={reason.trim().length < 5}
-                onClick={() => {
-                  store.resumeKillSwitch(reason.trim());
+                onClick={async () => {
+                  const r = await store.resumeKillSwitch(reason.trim());
+                  if (!r.ok) return store.notify(r.error);
                   setOpen(false);
                   setReason("");
                   store.notify("PO creation resumed. Held orders can be raised from Procurement.");

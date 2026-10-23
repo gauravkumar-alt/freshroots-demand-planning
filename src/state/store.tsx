@@ -1,41 +1,29 @@
 "use client";
 
-// App state: which files are loaded, the latest analysis run, and the audit log.
-// The audit log is the single source of truth for decisions, POs and kill-switch events; statuses are derived from it.
+// App state. Shared data (audit log, uploaded files, retired rubric notes, quarter outcomes) lives on the server
+// in Supabase; this store loads it, keeps it fresh, and derives statuses from the audit log.
+// The analysis itself runs in the browser from the current files: it is deterministic and needs no server.
 
 import * as React from "react";
+import { REVIEWER } from "@/business/config";
 import { parseCsv, toCsv } from "@/business/csv";
-import { decide as decideRec, effectiveDecisions, reopenAudit, rubricNotes, type DecisionInput, type DecisionResult } from "@/business/decisions";
+import { decide as validateDecision, effectiveDecisions, reopenAudit, rubricNotes, type DecisionInput } from "@/business/decisions";
+import { auditEvent } from "@/business/events";
 import { fallbackHighlights, highlightFacts, type Highlight } from "@/business/highlights";
 import { ACTION_LABEL, PROCUREMENT_ACTIONS } from "@/business/labels";
-import { killSwitchCheck, type KillSwitchCheck } from "@/business/measurement";
+import { killSwitchState, type KillSwitchCheck, type RunSummary } from "@/business/measurement";
 import { runAnalysis as runEngine } from "@/business/recommendationEngine";
-import type { AnalysisResult, AuditEntry, AuditEventType, DecisionStatus, QuarterOutcome, Recommendation, RubricNote } from "@/business/types";
+import type { AnalysisResult, AuditEntry, DecisionStatus, QuarterOutcome, Recommendation, RubricNote } from "@/business/types";
 import { validateAndPrepare, type FileKind, type RawFile, type ValidationReport } from "@/business/validationEngine";
-import { purchaseOrderRequest, type PurchaseOrderResult } from "@/business/zohoPurchaseOrder";
-import { demoHistory, demoRawFiles, messyRawFiles, REVIEWER } from "@/data/demoData";
 import { freshrootsRawFiles } from "@/data/freshrootsFiles";
-import type { RunSummary } from "@/data/demoHistory";
 import { formatTime, shortDistributor } from "@/lib/utils";
 
-const STORAGE_KEY = "freshroots:planning:v3";
+const REFRESH_MS = 30_000;
 
 export interface UploadedFile {
   name: string;
   text: string;
   uploadedAt: string;
-}
-
-export type BaseData = "demo" | "messy" | "freshroots";
-
-interface Persisted {
-  base: BaseData;
-  uploads: Partial<Record<FileKind, UploadedFile>>;
-  /** Per dataset, so decisions on the demo never mix with decisions on real files. */
-  ranAt: Partial<Record<BaseData, string>>;
-  audits: Partial<Record<BaseData, AuditEntry[]>>;
-  outcomes: QuarterOutcome[];
-  retiredNotes: string[];
 }
 
 export type PoState =
@@ -52,6 +40,7 @@ export interface ProcurementItem {
 }
 
 export interface Integrations {
+  supabase: boolean;
   gemini: boolean;
   zoho: boolean;
   email: boolean;
@@ -64,19 +53,20 @@ export interface HighlightsState {
   note: string | null;
 }
 
-export interface KillSwitchState extends KillSwitchCheck {
-  /** The kill switch has fired for this run and PO creation is halted. */
+export interface KillSwitchView extends KillSwitchCheck {
   active: boolean;
   firedAt: string | null;
   lastEmail: AuditEntry | null;
 }
 
+export type ActionResult = { ok: true } | { ok: false; error: string };
+
 interface Store {
   ready: boolean;
+  loadError: string | null;
+  storage: "supabase" | "memory" | null;
   user: string;
-  base: BaseData;
   uploads: Partial<Record<FileKind, UploadedFile>>;
-  isDemo: boolean;
   dataLabel: string;
   report: ValidationReport;
   analysis: AnalysisResult | null;
@@ -87,25 +77,23 @@ interface Store {
   notes: RubricNote[];
   integrations: Integrations | null;
   highlights: HighlightsState;
-  killSwitch: KillSwitchState | null;
+  killSwitch: KillSwitchView | null;
   statusOf: (sku: string) => DecisionStatus;
   decisionFor: (sku: string) => AuditEntry | undefined;
   poFor: (sku: string) => PoState;
   procurement: ProcurementItem[];
 
   runAnalysis: () => { ok: boolean; message: string };
-  uploadFile: (kind: FileKind, file: File) => Promise<void>;
-  removeUpload: (kind: FileKind) => void;
-  setBase: (base: BaseData) => void;
-  decide: (rec: Recommendation, input: DecisionInput) => DecisionResult;
-  approveMany: (recs: Recommendation[]) => number;
-  reopen: (rec: Recommendation) => void;
-  retryPo: (sku: string) => void;
-  resumeKillSwitch: (reason: string) => void;
-  retireNote: (id: string) => void;
+  uploadFile: (kind: FileKind, file: File) => Promise<ActionResult>;
+  removeUpload: (kind: FileKind) => Promise<ActionResult>;
+  decide: (rec: Recommendation, input: DecisionInput) => Promise<ActionResult>;
+  approveMany: (recs: Recommendation[]) => Promise<number>;
+  reopen: (rec: Recommendation) => Promise<ActionResult>;
+  retryPo: (sku: string) => Promise<ActionResult>;
+  resumeKillSwitch: (reason: string) => Promise<ActionResult>;
+  retireNote: (id: string) => Promise<ActionResult>;
   exportProcurementCsv: () => { filename: string; csv: string; count: number };
-  setOutcome: (o: QuarterOutcome) => void;
-  resetDemo: () => void;
+  setOutcome: (o: QuarterOutcome) => Promise<ActionResult>;
 
   detailSku: string | null;
   openDetail: (sku: string | null) => void;
@@ -121,126 +109,134 @@ export function useStore(): Store {
   return s;
 }
 
-function filesFor(base: BaseData, uploads: Partial<Record<FileKind, UploadedFile>>): Partial<Record<FileKind, RawFile>> {
-  const files: Partial<Record<FileKind, RawFile>> = base === "freshroots" ? freshrootsRawFiles() : base === "messy" ? messyRawFiles() : demoRawFiles();
+/** The Freshroots sample files, with any uploaded file replacing its slot. */
+function filesFor(uploads: Partial<Record<FileKind, UploadedFile>>): Partial<Record<FileKind, RawFile>> {
+  const files = freshrootsRawFiles();
   for (const [kind, up] of Object.entries(uploads) as [FileKind, UploadedFile][]) files[kind] = parseCsv(up.text);
   return files;
 }
 
-function event(type: AuditEventType, runId: string, user: string, reason: string, extra: Partial<AuditEntry> = {}): AuditEntry {
-  const timestamp = extra.timestamp ?? new Date().toISOString();
-  return {
-    id: `${runId}-${type}-${extra.sku ?? "all"}-${timestamp}-${Math.random().toString(36).slice(2, 7)}`,
-    timestamp,
-    runId,
-    type,
-    user,
-    sku: null,
-    product: null,
-    systemAction: null,
-    systemQty: null,
-    finalAction: null,
-    finalQty: null,
-    override: false,
-    reason,
-    exceptionCategory: null,
-    risk: null,
-    ...extra,
-  };
+const uploadsKey = (u: Partial<Record<FileKind, UploadedFile>>) =>
+  Object.entries(u)
+    .map(([k, v]) => `${k}:${v?.uploadedAt}`)
+    .sort()
+    .join("|");
+
+async function api<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) }, cache: "no-store" });
+  const body = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status}).`);
+  return body;
 }
-
-const runEntry = (a: AnalysisResult, source: string) =>
-  event("ANALYSIS_RUN", a.runId, "System", `Weekly analysis: ${a.recommendations.length} SKUs from ${source}.`, { timestamp: a.ranAt });
-
-function load(): Persisted | null {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Persisted) : null;
-  } catch {
-    return null;
-  }
-}
-
-const NO_HISTORY = { audit: [] as AuditEntry[], runs: [] as RunSummary[] };
-const historyFor = (base: BaseData) => (base === "freshroots" ? NO_HISTORY : demoHistory);
 
 const isReorder = (e: AuditEntry) => e.finalAction === "IMMEDIATE_REORDER" || e.finalAction === "REORDER_1_5X";
+const byTimeDesc = (a: AuditEntry, b: AuditEntry) => b.timestamp.localeCompare(a.timestamp);
+
+interface SharedState {
+  storage: "supabase" | "memory";
+  audit: AuditEntry[];
+  uploads: Partial<Record<FileKind, UploadedFile>>;
+  retiredNotes: string[];
+  outcomes: QuarterOutcome[];
+}
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = React.useState(false);
-  const [base, setBaseState] = React.useState<BaseData>("freshroots");
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [storage, setStorage] = React.useState<SharedState["storage"] | null>(null);
   const [uploads, setUploads] = React.useState<Partial<Record<FileKind, UploadedFile>>>({});
-  const [audits, setAudits] = React.useState<Partial<Record<BaseData, AuditEntry[]>>>({});
-  const [ranAts, setRanAts] = React.useState<Partial<Record<BaseData, string>>>({});
+  const [audit, setAudit] = React.useState<AuditEntry[]>([]);
   const [outcomes, setOutcomes] = React.useState<QuarterOutcome[]>([]);
   const [retiredNotes, setRetiredNotes] = React.useState<string[]>([]);
   const [analysis, setAnalysis] = React.useState<AnalysisResult | null>(null);
-  const [filesVersion, setFilesVersion] = React.useState(0);
-  const [analysisVersion, setAnalysisVersion] = React.useState(0);
+  const [analysisFiles, setAnalysisFiles] = React.useState("");
   const [detailSku, setDetailSku] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
   const [integrations, setIntegrations] = React.useState<Integrations | null>(null);
   const [highlights, setHighlights] = React.useState<HighlightsState>({ status: "loading", items: [], note: null });
   const [pendingPo, setPendingPo] = React.useState<string[]>([]);
-  const firing = React.useRef(false);
 
-  const report = React.useMemo(() => validateAndPrepare(filesFor(base, uploads)), [base, uploads]);
+  const report = React.useMemo(() => validateAndPrepare(filesFor(uploads)), [uploads]);
   const coreUploaded = (["sales", "inventory", "skuMaster"] as FileKind[]).every((k) => uploads[k]);
-  const isDemo = base !== "freshroots" && !coreUploaded;
-  const dataLabel = coreUploaded ? "UPLOADED DATA" : base === "freshroots" ? "FRESHROOTS FILES" : "DEMO DATA";
-  const sourceLabel = coreUploaded ? "uploaded SAP and Zoho exports" : base === "freshroots" ? "the Freshroots sample files" : Object.keys(uploads).length ? "uploaded files and demo exports" : "demo SAP and Zoho exports";
-  const history = historyFor(base);
-
-  const ownAudit = React.useMemo(() => audits[base] ?? [], [audits, base]);
-  const setOwnAudit = React.useCallback((fn: (list: AuditEntry[]) => AuditEntry[]) => setAudits((a) => ({ ...a, [base]: fn(a[base] ?? []) })), [base]);
-
-  const audit = React.useMemo(() => [...history.audit, ...ownAudit].sort((a, b) => b.timestamp.localeCompare(a.timestamp)), [history, ownAudit]);
+  const dataLabel = coreUploaded ? "UPLOADED DATA" : Object.keys(uploads).length ? "SAMPLE + UPLOADS" : "SAMPLE FILES";
+  const sourceLabel = coreUploaded ? "uploaded SAP and Zoho exports" : Object.keys(uploads).length ? "uploaded files and the Freshroots sample files" : "the Freshroots sample files";
   const notes = React.useMemo(() => rubricNotes(audit, retiredNotes), [audit, retiredNotes]);
 
-  // Load saved state once, then auto-run the analysis so the app works without any upload.
+  const notify = React.useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast((t) => (t === message ? null : t)), 3200);
+  }, []);
+
+  /** Adds entries the server confirmed, without duplicating ones already loaded. */
+  const merge = React.useCallback((entries: AuditEntry[]) => {
+    setAudit((list) => {
+      const ids = new Set(list.map((e) => e.id));
+      return [...list, ...entries.filter((e) => !ids.has(e.id))].sort(byTimeDesc);
+    });
+  }, []);
+
+  const applyShared = React.useCallback((s: SharedState) => {
+    setStorage(s.storage);
+    setAudit([...s.audit].sort(byTimeDesc));
+    setUploads(s.uploads);
+    setRetiredNotes(s.retiredNotes);
+    setOutcomes(s.outcomes);
+  }, []);
+
+  const postEvents = React.useCallback(
+    async (entries: AuditEntry[]): Promise<ActionResult> => {
+      try {
+        await api("/api/events", { method: "POST", body: JSON.stringify({ entries }) });
+        merge(entries);
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: (e as Error).message };
+      }
+    },
+    [merge],
+  );
+
+  // First load: shared state from the server, then run this week's analysis on the current files.
   React.useEffect(() => {
-    const saved = load();
-    const b = saved?.base ?? "freshroots";
-    const ups = saved?.uploads ?? {};
-    const retired = saved?.retiredNotes ?? [];
-    setBaseState(b);
-    setUploads(ups);
-    setOutcomes(saved?.outcomes ?? []);
-    setRetiredNotes(retired);
-    const savedAudits = saved?.audits ?? {};
-    const savedRanAt = saved?.ranAt ?? {};
-    const rep = validateAndPrepare(filesFor(b, ups));
-    let own = savedAudits[b] ?? [];
-    const ran = { ...savedRanAt };
-    if (rep.dataset) {
-      const a = runEngine(rep.dataset, savedRanAt[b] ?? new Date().toISOString(), rubricNotes([...historyFor(b).audit, ...own], retired));
-      setAnalysis(a);
-      if (!savedRanAt[b]) own = [...own, runEntry(a, b === "freshroots" ? "the Freshroots sample files" : "demo SAP and Zoho exports")];
-      ran[b] = a.ranAt;
-    }
-    setAudits({ ...savedAudits, [b]: own });
-    setRanAts(ran);
-    setReady(true);
+    (async () => {
+      try {
+        const s = await api<SharedState>("/api/state");
+        applyShared(s);
+        const rep = validateAndPrepare(filesFor(s.uploads));
+        if (rep.dataset) {
+          const a = runEngine(rep.dataset, new Date().toISOString(), rubricNotes(s.audit, s.retiredNotes));
+          setAnalysis(a);
+          setAnalysisFiles(uploadsKey(s.uploads));
+          if (!s.audit.some((e) => e.runId === a.runId && e.type === "ANALYSIS_RUN")) {
+            const run = auditEvent("ANALYSIS_RUN", a.runId, "System", `Weekly analysis: ${a.recommendations.length} SKUs from the current files.`, { timestamp: a.ranAt });
+            await api("/api/events", { method: "POST", body: JSON.stringify({ entries: [run] }) })
+              .then(() => setAudit((l) => [run, ...l]))
+              .catch(() => {});
+          }
+        }
+      } catch (e) {
+        setLoadError((e as Error).message);
+      } finally {
+        setReady(true);
+      }
+    })();
     fetch("/api/status")
       .then((r) => r.json())
       .then(setIntegrations)
-      .catch(() => setIntegrations({ gemini: false, zoho: false, email: false, emailTo: null }));
-  }, []);
+      .catch(() => setIntegrations({ supabase: false, gemini: false, zoho: false, email: false, emailTo: null }));
+  }, [applyShared]);
 
+  // Keep shared state fresh so everyone sees the same decisions.
   React.useEffect(() => {
-    if (!ready) return;
-    const data: Persisted = { base, uploads, ranAt: ranAts, audits, outcomes, retiredNotes };
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // Large uploads can exceed browser storage. Keep decisions; the files stay for this session only.
-      try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, uploads: {} }));
-      } catch {
-        /* storage unavailable: state lives for this session */
-      }
-    }
-  }, [ready, base, uploads, ranAts, audits, outcomes, retiredNotes]);
+    if (!ready || loadError) return;
+    const refresh = () => api<SharedState>("/api/state").then(applyShared).catch(() => {});
+    const id = window.setInterval(refresh, REFRESH_MS);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [ready, loadError, applyShared]);
 
   // Gemini trends + highlights for each new run, with rule-generated highlights as the fallback.
   React.useEffect(() => {
@@ -261,13 +257,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, [analysis]);
 
-  const notify = React.useCallback((message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast((t) => (t === message ? null : t)), 3200);
-  }, []);
-
-  const append = React.useCallback((...entries: AuditEntry[]) => setOwnAudit((list) => [...list, ...entries]), [setOwnAudit]);
-
   const current = React.useMemo(() => {
     const m = new Map<string, AuditEntry>();
     if (!analysis) return m;
@@ -278,15 +267,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const statusOf = React.useCallback((sku: string): DecisionStatus => (current.get(sku)?.type as DecisionStatus | undefined) ?? "NEEDS_REVIEW", [current]);
   const decisionFor = React.useCallback((sku: string) => current.get(sku), [current]);
 
-  const killSwitch = React.useMemo<KillSwitchState | null>(() => {
+  const killSwitch = React.useMemo<KillSwitchView | null>(() => {
     if (!analysis) return null;
-    const check = killSwitchCheck(audit, analysis.runId);
-    const events = audit.filter((e) => e.runId === analysis.runId && (e.type === "KILL_SWITCH" || e.type === "KILL_SWITCH_RESUMED"));
-    const last = events[0];
+    const ks = killSwitchState(audit, analysis.runId);
     return {
-      ...check,
-      active: last?.type === "KILL_SWITCH",
-      firedAt: events.find((e) => e.type === "KILL_SWITCH")?.timestamp ?? null,
+      ...ks.check,
+      active: ks.active,
+      firedAt: audit.find((e) => e.runId === analysis.runId && e.type === "KILL_SWITCH")?.timestamp ?? null,
       lastEmail: audit.find((e) => e.runId === analysis.runId && e.type === "EMAIL_SENT") ?? null,
     };
   }, [audit, analysis]);
@@ -305,68 +292,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [current, audit, pendingPo],
   );
 
-  /** The map's last step: approved reorder → threshold check → PO on Zoho (or held). */
-  const createPo = React.useCallback(
-    async (rec: Recommendation, entry: AuditEntry, halted: boolean) => {
-      if (!analysis) return;
-      const req = purchaseOrderRequest(rec, entry, analysis.analysisWeek);
-      if (!req) return;
-      const base = { sku: rec.sku, product: rec.product, finalAction: entry.finalAction, finalQty: entry.finalQty };
-      if (halted) {
-        append(event("PO_HELD", analysis.runId, "System", "Kill switch active: purchase order held, not sent to Zoho.", base));
-        return;
-      }
-      setPendingPo((p) => [...p, rec.sku]);
-      try {
-        const res = (await fetch("/api/zoho/purchase-orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) }).then((r) => r.json())) as PurchaseOrderResult;
-        if (res.ok) {
-          append(
-            event("PO_CREATED", analysis.runId, "System", `${res.mode === "live" ? "Zoho" : "Simulated Zoho"} PO ${res.poNumber} for ${req.quantity.toLocaleString("en-IN")} units.`, {
-              ...base,
-              reference: res.poNumber,
-            }),
-          );
-        } else append(event("PO_FAILED", analysis.runId, "System", res.error ?? "Zoho rejected the purchase order.", base));
-      } catch {
-        append(event("PO_FAILED", analysis.runId, "System", "Could not reach the server to create the PO.", base));
-      } finally {
-        setPendingPo((p) => p.filter((s) => s !== rec.sku));
-      }
-    },
-    [analysis, append],
-  );
-
-  // Kill switch: fire once when the run breaches 50% rejections, and again only if more rejections follow a resume.
-  React.useEffect(() => {
-    if (!ready || !analysis || !killSwitch || !killSwitch.breached || killSwitch.active || firing.current) return;
-    const resumed = audit.find((e) => e.runId === analysis.runId && e.type === "KILL_SWITCH_RESUMED");
-    if (resumed && Number(resumed.reference ?? 0) >= killSwitch.rejected) return;
-    firing.current = true;
-    const runId = analysis.runId;
-    const held = [...current.values()].filter((e) => isReorder(e) && e.type !== "REJECTED").length;
-    append(
-      event("KILL_SWITCH", runId, "System", `Kill switch fired: ${killSwitch.rejected} of ${killSwitch.decided} decisions rejected (${((killSwitch.rate ?? 0) * 100).toFixed(1)}% > 50%). Zoho PO creation halted.`, {
-        reference: String(killSwitch.rejected),
-      }),
-    );
-    const recentRejections = [...current.values()].filter((e) => e.type === "REJECTED").map((e) => ({ sku: e.sku!, product: e.product ?? "", reason: e.reason }));
-    fetch("/api/kill-switch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ check: killSwitch, weekLabel: analysis.weekLabel, heldPos: held, recentRejections }) })
-      .then((r) => r.json())
-      .then((res: { ok: boolean; mode: string; to: string | null; subject: string; id?: string; error?: string; reason?: string }) => {
-        const msg = res.ok
-          ? res.mode === "live"
-            ? `Kill-switch email sent to ${res.to}: “${res.subject}”.`
-            : `Kill-switch email prepared${res.to ? ` for ${res.to}` : ""} but not sent: ${res.reason}`
-          : `Kill-switch email failed${res.to ? ` to ${res.to}` : ""}: ${res.error}`;
-        append(event("EMAIL_SENT", runId, "System", msg, { reference: res.mode === "live" ? (res.id ?? "sent") : "preview" }));
-        notify(res.ok && res.mode === "live" ? "Kill switch fired. Email sent." : "Kill switch fired. POs are on hold.");
-      })
-      .catch(() => append(event("EMAIL_SENT", runId, "System", "Kill-switch email failed: server unreachable.", { reference: "failed" })))
-      .finally(() => {
-        firing.current = false;
-      });
-  }, [ready, analysis, killSwitch, audit, current, append, notify]);
-
   const procurement = React.useMemo<ProcurementItem[]>(() => {
     if (!analysis) return [];
     return analysis.recommendations
@@ -377,10 +302,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [analysis, current, poFor]);
 
   const runs = React.useMemo<RunSummary[]>(() => {
-    const list = [...history.runs];
-    if (analysis && !list.some((r) => r.runId === analysis.runId)) {
-      const recs = analysis.recommendations;
-      list.push({
+    if (!analysis) return [];
+    const recs = analysis.recommendations;
+    return [
+      {
         runId: analysis.runId,
         weekLabel: analysis.weekLabel,
         generated: recs.length,
@@ -389,90 +314,100 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         stockout: recs.filter((r) => r.risk === "STOCKOUT").length,
         overstock: recs.filter((r) => r.risk === "OVERSTOCK").length,
         highDemand: recs.filter((r) => r.triggered.some((h) => h.code === "HIGH_DEMAND")).length,
-      });
-    }
-    return list;
-  }, [analysis, history]);
+      },
+    ];
+  }, [analysis]);
+
+  const ctx = React.useMemo(() => (analysis ? { runId: analysis.runId, analysisWeek: analysis.analysisWeek, weekLabel: analysis.weekLabel } : null), [analysis]);
 
   const runAnalysis = React.useCallback(() => {
     if (!report.canRun || !report.dataset) return { ok: false, message: "Fix the blocking data errors on the Data page before running the analysis." };
     const a = runEngine(report.dataset, new Date().toISOString(), notes);
     setAnalysis(a);
-    setAnalysisVersion(filesVersion);
-    setRanAts((r) => ({ ...r, [base]: a.ranAt }));
-    append(runEntry(a, sourceLabel));
+    setAnalysisFiles(uploadsKey(uploads));
+    void postEvents([auditEvent("ANALYSIS_RUN", a.runId, "System", `Weekly analysis: ${a.recommendations.length} SKUs from ${sourceLabel}.`, { timestamp: a.ranAt })]);
     return { ok: true, message: `Analysis complete: ${a.recommendations.length} SKUs for ${a.weekLabel}.` };
-  }, [report, filesVersion, sourceLabel, notes, append, base]);
+  }, [report, notes, uploads, sourceLabel, postEvents]);
 
-  const touchFiles = () => setFilesVersion((v) => v + 1);
-
-  const uploadFile = React.useCallback(async (kind: FileKind, file: File) => {
-    const text = await file.text();
-    setUploads((u) => ({ ...u, [kind]: { name: file.name, text, uploadedAt: new Date().toISOString() } }));
-    touchFiles();
+  const uploadFile = React.useCallback(async (kind: FileKind, file: File): Promise<ActionResult> => {
+    try {
+      const text = await file.text();
+      const res = await api<{ upload: UploadedFile }>("/api/uploads", { method: "PUT", body: JSON.stringify({ kind, name: file.name, text }) });
+      setUploads((u) => ({ ...u, [kind]: res.upload }));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
   }, []);
 
-  const removeUpload = React.useCallback((kind: FileKind) => {
-    setUploads((u) => {
-      const next = { ...u };
-      delete next[kind];
-      return next;
-    });
-    touchFiles();
+  const removeUpload = React.useCallback(async (kind: FileKind): Promise<ActionResult> => {
+    try {
+      await api(`/api/uploads?kind=${kind}`, { method: "DELETE" });
+      setUploads((u) => {
+        const next = { ...u };
+        delete next[kind];
+        return next;
+      });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
   }, []);
 
-  /** Switching dataset runs it straight away, with that dataset's own decisions and history. */
-  const setBase = React.useCallback(
-    (b: BaseData) => {
-      setBaseState(b);
-      const rep = validateAndPrepare(filesFor(b, uploads));
-      if (!rep.dataset) {
-        setAnalysis(null);
-        touchFiles();
-        return;
+  /** Sends decisions to the server, which records them, checks the kill switch and raises or holds each PO. */
+  const submit = React.useCallback(
+    async (items: { rec: Recommendation; input: DecisionInput }[]) => {
+      if (!ctx) throw new Error("Run the analysis first.");
+      const reorderSkus = items.filter((i) => i.input.kind !== "REJECT").map((i) => i.rec.sku);
+      setPendingPo((p) => [...p, ...reorderSkus]);
+      try {
+        const res = await api<{ results: { sku: string; ok: boolean; error?: string }[]; entries: AuditEntry[] }>("/api/decisions", {
+          method: "POST",
+          body: JSON.stringify({ ...ctx, items }),
+        });
+        merge(res.entries);
+        return res.results;
+      } finally {
+        setPendingPo((p) => p.filter((s) => !reorderSkus.includes(s)));
       }
-      const own = audits[b] ?? [];
-      const a = runEngine(rep.dataset, new Date().toISOString(), rubricNotes([...historyFor(b).audit, ...own], retiredNotes));
-      setAnalysis(a);
-      setRanAts((r) => ({ ...r, [b]: a.ranAt }));
-      setAudits((all) => ({ ...all, [b]: [...(all[b] ?? []), runEntry(a, b === "freshroots" ? "the Freshroots sample files" : b === "messy" ? "demo exports with data issues" : "demo SAP and Zoho exports")] }));
-      setFilesVersion(0);
-      setAnalysisVersion(0);
     },
-    [uploads, audits, retiredNotes],
+    [ctx, merge],
   );
 
   const decide = React.useCallback(
-    (rec: Recommendation, input: DecisionInput): DecisionResult => {
-      if (!analysis) return { ok: false, error: "Run the analysis first." };
-      const res = decideRec(rec, analysis.runId, input, REVIEWER, new Date().toISOString());
-      if (res.ok) {
-        append(res.audit);
-        if (res.audit.type !== "REJECTED") void createPo(rec, res.audit, !!killSwitch?.active);
+    async (rec: Recommendation, input: DecisionInput): Promise<ActionResult> => {
+      if (!ctx) return { ok: false, error: "Run the analysis first." };
+      // Same validation the server runs, so form errors show instantly.
+      const check = validateDecision(rec, ctx.runId, input, REVIEWER, new Date().toISOString());
+      if (!check.ok) return check;
+      try {
+        const [r] = await submit([{ rec, input }]);
+        return r.ok ? { ok: true } : { ok: false, error: r.error ?? "The decision was not recorded." };
+      } catch (e) {
+        return { ok: false, error: (e as Error).message };
       }
-      return res;
     },
-    [analysis, append, createPo, killSwitch],
+    [ctx, submit],
   );
 
   const approveMany = React.useCallback(
-    (recs: Recommendation[]) => {
-      if (!analysis) return 0;
-      const now = Date.now();
-      const ok = recs.map((rec, i) => ({ rec, res: decideRec(rec, analysis.runId, { kind: "APPROVE" }, REVIEWER, new Date(now + i).toISOString()) })).filter((x) => x.res.ok);
-      append(...ok.map((x) => (x.res as Extract<DecisionResult, { ok: true }>).audit));
-      for (const x of ok) void createPo(x.rec, (x.res as Extract<DecisionResult, { ok: true }>).audit, !!killSwitch?.active);
-      return ok.length;
+    async (recs: Recommendation[]) => {
+      try {
+        const results = await submit(recs.map((rec) => ({ rec, input: { kind: "APPROVE" as const } })));
+        return results.filter((r) => r.ok).length;
+      } catch {
+        return 0;
+      }
     },
-    [analysis, append, createPo, killSwitch],
+    [submit],
   );
 
   const reopen = React.useCallback(
-    (rec: Recommendation) => {
-      const prev = analysis && current.get(rec.sku);
-      if (!analysis || !prev) return;
-      append(
-        reopenAudit(rec, analysis.runId, REVIEWER, new Date().toISOString(), {
+    async (rec: Recommendation): Promise<ActionResult> => {
+      const prev = current.get(rec.sku);
+      if (!ctx || !prev) return { ok: false, error: "Nothing to reopen." };
+      return postEvents([
+        reopenAudit(rec, ctx.runId, REVIEWER, new Date().toISOString(), {
           runId: prev.runId,
           sku: rec.sku,
           status: prev.type as "APPROVED" | "EDITED" | "REJECTED",
@@ -483,29 +418,46 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           user: prev.user,
           timestamp: prev.timestamp,
         }),
-      );
+      ]);
     },
-    [analysis, current, append],
+    [ctx, current, postEvents],
   );
 
   const retryPo = React.useCallback(
-    (sku: string) => {
+    async (sku: string): Promise<ActionResult> => {
       const rec = analysis?.recommendations.find((r) => r.sku === sku);
-      const entry = current.get(sku);
-      if (rec && entry) void createPo(rec, entry, !!killSwitch?.active);
+      if (!ctx || !rec) return { ok: false, error: "Unknown SKU." };
+      setPendingPo((p) => [...p, sku]);
+      try {
+        const res = await api<{ ok: boolean; error?: string; entries?: AuditEntry[] }>("/api/po/retry", { method: "POST", body: JSON.stringify({ ...ctx, rec }) });
+        if (res.entries) merge(res.entries);
+        return res.ok ? { ok: true } : { ok: false, error: res.error ?? "PO not raised." };
+      } catch (e) {
+        return { ok: false, error: (e as Error).message };
+      } finally {
+        setPendingPo((p) => p.filter((s) => s !== sku));
+      }
     },
-    [analysis, current, createPo, killSwitch],
+    [analysis, ctx, merge],
   );
 
   const resumeKillSwitch = React.useCallback(
-    (reason: string) => {
-      if (!analysis || !killSwitch) return;
-      append(event("KILL_SWITCH_RESUMED", analysis.runId, REVIEWER, `PO creation resumed: ${reason}`, { reference: String(killSwitch.rejected) }));
+    async (reason: string): Promise<ActionResult> => {
+      if (!ctx || !killSwitch) return { ok: false, error: "No kill switch to resume." };
+      return postEvents([auditEvent("KILL_SWITCH_RESUMED", ctx.runId, REVIEWER, `PO creation resumed: ${reason}`, { reference: String(killSwitch.rejected) })]);
     },
-    [analysis, killSwitch, append],
+    [ctx, killSwitch, postEvents],
   );
 
-  const retireNote = React.useCallback((id: string) => setRetiredNotes((l) => (l.includes(id) ? l : [...l, id])), []);
+  const retireNote = React.useCallback(async (id: string): Promise<ActionResult> => {
+    try {
+      await api("/api/notes", { method: "POST", body: JSON.stringify({ noteId: id }) });
+      setRetiredNotes((l) => (l.includes(id) ? l : [...l, id]));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  }, []);
 
   const exportProcurementCsv = React.useCallback(() => {
     const runId = analysis?.runId ?? "run";
@@ -528,8 +480,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ]),
     );
     if (analysis) {
-      append(
-        event(
+      void postEvents([
+        auditEvent(
           "EXPORT",
           runId,
           REVIEWER,
@@ -538,43 +490,31 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             .map((p) => `${p.rec.sku} ${shortDistributor(p.rec.leadDistributor)}`)
             .join(", ")}${procurement.length > 3 ? "…" : ""}).`,
         ),
-      );
+      ]);
     }
     return { filename: `freshroots-approved-orders-${runId}.csv`, csv, count: procurement.length };
-  }, [analysis, procurement, append]);
+  }, [analysis, procurement, postEvents]);
 
-  const setOutcome = React.useCallback((o: QuarterOutcome) => {
-    setOutcomes((list) => [...list.filter((x) => x.quarter !== o.quarter), o]);
-  }, []);
-
-  const resetDemo = React.useCallback(() => {
+  const setOutcome = React.useCallback(async (o: QuarterOutcome): Promise<ActionResult> => {
     try {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
+      await api("/api/outcomes", { method: "POST", body: JSON.stringify(o) });
+      setOutcomes((list) => [...list.filter((x) => x.quarter !== o.quarter), o]);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
     }
-    setUploads({});
-    setOutcomes([]);
-    setRetiredNotes([]);
-    const rep = validateAndPrepare(filesFor(base, {}));
-    const a = rep.dataset ? runEngine(rep.dataset, new Date().toISOString(), rubricNotes(historyFor(base).audit, [])) : null;
-    setAnalysis(a);
-    setAudits(a ? { [base]: [runEntry(a, base === "freshroots" ? "the Freshroots sample files" : "demo SAP and Zoho exports")] } : {});
-    setRanAts(a ? { [base]: a.ranAt } : {});
-    setFilesVersion(0);
-    setAnalysisVersion(0);
-  }, [base]);
+  }, []);
 
   const value: Store = {
     ready,
+    loadError,
+    storage,
     user: REVIEWER,
-    base,
     uploads,
-    isDemo,
     dataLabel,
     report,
     analysis,
-    stale: filesVersion !== analysisVersion,
+    stale: !!analysis && analysisFiles !== uploadsKey(uploads),
     audit,
     outcomes,
     runs,
@@ -589,7 +529,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     runAnalysis,
     uploadFile,
     removeUpload,
-    setBase,
     decide,
     approveMany,
     reopen,
@@ -598,7 +537,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     retireNote,
     exportProcurementCsv,
     setOutcome,
-    resetDemo,
     detailSku,
     openDetail: setDetailSku,
     toast,

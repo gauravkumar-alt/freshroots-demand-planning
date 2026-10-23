@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 import { daysBetween, formatDate } from "@/business/dates";
-import { DEMO_EXPORT_DATE } from "@/data/demoData";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { KillSwitchBanner } from "./KillSwitchBanner";
@@ -28,10 +27,10 @@ function todayIso() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const store = useStore();
-  const { analysis, isDemo, stale, ready } = store;
+  const { analysis, stale, ready } = store;
   const pending = analysis ? analysis.recommendations.filter((r) => store.statusOf(r.sku) === "NEEDS_REVIEW").length : 0;
 
-  const exportDate = analysis ? (store.report.dataset?.asOfDate ?? (isDemo ? DEMO_EXPORT_DATE : analysis.analysisWeek)) : null;
+  const exportDate = analysis ? (store.report.dataset?.asOfDate ?? analysis.analysisWeek) : null;
   const age = exportDate ? Math.max(0, daysBetween(exportDate, todayIso())) : null;
 
   const onRun = () => {
@@ -52,15 +51,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </span>
             </Link>
             <div className="lg:mt-4">
-              {isDemo ? (
-                <span className="inline-flex items-center gap-1.5 rounded-[4px] border border-review/40 bg-review-bg px-2 py-1 font-mono text-[11px] font-semibold tracking-[0.08em] text-review">
-                  <span className="size-1.5 rounded-full bg-review" /> DEMO DATA
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-[4px] border border-approved/40 bg-approved-bg px-2 py-1 font-mono text-[11px] font-semibold tracking-[0.08em] text-approved">
-                  {store.dataLabel}
-                </span>
-              )}
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-[4px] border px-2 py-1 font-mono text-[11px] font-semibold tracking-[0.08em]",
+                  store.dataLabel === "UPLOADED DATA" ? "border-approved/40 bg-approved-bg text-approved" : "border-line-2 bg-sunken text-ink-2",
+                )}
+              >
+                {store.dataLabel}
+              </span>
             </div>
           </div>
 
@@ -90,6 +88,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="mt-auto hidden border-t border-line p-4 lg:block">
+            <p className="mb-3 flex items-center gap-1.5 text-[12px] text-ink-2">
+              <span className={cn("size-1.5 rounded-full", store.storage === "supabase" ? "bg-approved" : "bg-review")} />
+              {store.storage === "supabase" ? "Saved to Supabase" : store.storage === "memory" ? "Not saved: Supabase not connected" : "Connecting…"}
+            </p>
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Reviewer</p>
             <p className="mt-1 text-[13px] font-medium">{store.user}</p>
             <p className="text-[12px] text-ink-3">Senior Demand Planner</p>
@@ -123,7 +125,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         {ready && <KillSwitchBanner />}
 
-        <main className="px-4 py-5 lg:px-6">{ready ? children : <Loading />}</main>
+        {ready && store.storage === "memory" && (
+          <div className="border-b border-review/30 bg-review-bg px-4 py-2 text-[12.5px] text-review lg:px-6">
+            Supabase is not connected. Decisions are kept only until the server restarts. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to save them.
+          </div>
+        )}
+        <main className="px-4 py-5 lg:px-6">
+          {!ready ? (
+            <Loading />
+          ) : store.loadError ? (
+            <div className="mx-auto mt-16 max-w-md rounded-md border border-rejected/40 bg-surface p-6 text-center">
+              <p className="text-[15px] font-semibold">Could not load shared data</p>
+              <p className="mt-1 text-[13px] text-ink-2">{store.loadError}</p>
+              <p className="mt-2 text-[12.5px] text-ink-3">Check the Supabase connection and that supabase/schema.sql has been run, then reload.</p>
+            </div>
+          ) : (
+            children
+          )}
+        </main>
       </div>
 
       {ready && <RecommendationDetail />}

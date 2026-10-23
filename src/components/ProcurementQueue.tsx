@@ -34,7 +34,13 @@ export function ProcurementQueue() {
         action={
           <>
             {retryable.length > 0 && (
-              <Button size="sm" variant="secondary" disabled={halted} onClick={() => retryable.forEach((i) => store.retryPo(i.rec.sku))} title={halted ? "Resume PO creation first" : undefined}>
+              <Button size="sm" variant="secondary" disabled={halted} onClick={async () => {
+                  for (const i of retryable) {
+                    const r = await store.retryPo(i.rec.sku);
+                    if (!r.ok) return store.notify(r.error);
+                  }
+                  store.notify("Held and failed POs raised.");
+                }} title={halted ? "Resume PO creation first" : undefined}>
                 <RefreshCw /> Raise {retryable.length} held/failed PO{retryable.length > 1 ? "s" : ""}
               </Button>
             )}

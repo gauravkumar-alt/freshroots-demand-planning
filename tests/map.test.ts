@@ -6,7 +6,7 @@ import { activeRubricNotes, runAnalysis } from "@/business/recommendationEngine"
 import type { AuditEntry } from "@/business/types";
 import { validateAndPrepare } from "@/business/validationEngine";
 import { purchaseOrderRequest } from "@/business/zohoPurchaseOrder";
-import { demoHistory, demoRawFiles } from "@/data/demoData";
+import { freshrootsRawFiles } from "@/data/freshrootsFiles";
 
 const entry = (sku: string, type: "APPROVED" | "REJECTED", runId = "2026-W42", i = 0): AuditEntry => ({
   id: `${runId}-${sku}-${type}-${i}`,
@@ -44,9 +44,6 @@ describe("Kill switch (more than 50% rejected)", () => {
     expect(c.breached).toBe(false);
     expect(c.status).toBe("NOT_YET_MEASURABLE");
   });
-  it("demo history stays well below the threshold", () => {
-    for (const run of ["2026-W39", "2026-W40", "2026-W41"]) expect(killSwitchCheck(demoHistory.audit, run).breached).toBe(false);
-  });
 });
 
 describe("Rejects → Rubric", () => {
@@ -56,17 +53,17 @@ describe("Rejects → Rubric", () => {
   });
 
   it("a rejection routes that SKU to judgement for the next two runs only", () => {
-    const notes = rubricNotes([entry("FR-1005", "REJECTED", "2026-W41")], []);
+    const notes = rubricNotes([entry("SKU001", "REJECTED", "2026-W41")], []);
     expect(notes).toHaveLength(1);
     expect(notes[0].untilRunId).toBe("2026-W43");
     expect(activeRubricNotes(notes, "2026-W41")).toHaveLength(0);
     expect(activeRubricNotes(notes, "2026-W42")).toHaveLength(1);
     expect(activeRubricNotes(notes, "2026-W44")).toHaveLength(0);
-    expect(activeRubricNotes(rubricNotes([entry("FR-1005", "REJECTED", "2026-W41")], [notes[0].id]), "2026-W42")).toHaveLength(0);
+    expect(activeRubricNotes(rubricNotes([entry("SKU001", "REJECTED", "2026-W41")], [notes[0].id]), "2026-W42")).toHaveLength(0);
 
-    const ds = validateAndPrepare(demoRawFiles()).dataset!;
-    const before = runAnalysis(ds, "2026-10-19T07:30:00Z").recommendations.find((r) => r.sku === "FR-1005")!;
-    const after = runAnalysis(ds, "2026-10-19T07:30:00Z", notes).recommendations.find((r) => r.sku === "FR-1005")!;
+    const ds = validateAndPrepare(freshrootsRawFiles()).dataset!;
+    const before = runAnalysis(ds, "2026-10-19T07:30:00Z").recommendations.find((r) => r.sku === "SKU001")!;
+    const after = runAnalysis(ds, "2026-10-19T07:30:00Z", notes).recommendations.find((r) => r.sku === "SKU001")!;
     expect(before.decisionMode).toBe("RULE_BASED");
     expect(after.decisionMode).toBe("JUDGEMENT");
     // The rubric note never changes the numbers or the action.
@@ -74,22 +71,16 @@ describe("Rejects → Rubric", () => {
     expect(after.suggestedQty).toBe(before.suggestedQty);
   });
 
-  it("with demo history, this week's judgement share stays within 15–20%", () => {
-    const ds = validateAndPrepare(demoRawFiles()).dataset!;
-    const a = runAnalysis(ds, "2026-10-19T07:30:00Z", rubricNotes(demoHistory.audit, []));
-    const share = a.recommendations.filter((r) => r.decisionMode === "JUDGEMENT").length / a.recommendations.length;
-    expect(share).toBeGreaterThanOrEqual(0.15);
-    expect(share).toBeLessThanOrEqual(0.2);
-  });
+
 });
 
 describe("Gemini highlights only write words", () => {
-  const a = runAnalysis(validateAndPrepare(demoRawFiles()).dataset!, "2026-10-19T07:30:00Z");
+  const a = runAnalysis(validateAndPrepare(freshrootsRawFiles()).dataset!, "2026-10-19T07:30:00Z");
   const facts = highlightFacts(a);
 
   it("keeps highlights that use numbers from the facts", () => {
-    const masala = facts.skus.find((s) => s.sku === "FR-1001")!;
-    const res = validateHighlights({ highlights: [{ title: "Masala Chips running short", detail: `Demand is ${masala.demandChange} with ${masala.weeksOfStock} weeks of stock.`, skus: ["FR-1001"], tone: "risk" }] }, facts);
+    const mango = facts.skus.find((s) => s.sku === "SKU001")!;
+    const res = validateHighlights({ highlights: [{ title: "Mango Drink running short", detail: `Demand is ${mango.demandChange} with ${mango.weeksOfStock} weeks of stock.`, skus: ["SKU001"], tone: "risk" }] }, facts);
     expect(res.highlights).toHaveLength(1);
   });
 
@@ -97,8 +88,8 @@ describe("Gemini highlights only write words", () => {
     const res = validateHighlights(
       {
         highlights: [
-          { title: "Demand will rise 73% next month", detail: "Forecast.", skus: ["FR-1001"], tone: "demand" },
-          { title: "Unknown SKU", detail: "Check it.", skus: ["FR-9999"], tone: "info" },
+          { title: "Demand will rise 73% next month", detail: "Forecast.", skus: ["SKU001"], tone: "demand" },
+          { title: "Unknown SKU", detail: "Check it.", skus: ["SKU999"], tone: "info" },
         ],
       },
       facts,
@@ -113,11 +104,11 @@ describe("Gemini highlights only write words", () => {
 });
 
 describe("PO on Zoho", () => {
-  const a = runAnalysis(validateAndPrepare(demoRawFiles()).dataset!, "2026-10-19T07:30:00Z");
-  const masala = a.recommendations.find((r) => r.sku === "FR-1001")!;
+  const a = runAnalysis(validateAndPrepare(freshrootsRawFiles()).dataset!, "2026-10-19T07:30:00Z");
+  const mango = a.recommendations.find((r) => r.sku === "SKU001")!;
   it("raises a PO only for approved reorders, at the approved quantity", () => {
-    const approved = { ...entry("FR-1001", "APPROVED"), finalAction: "IMMEDIATE_REORDER" as const, finalQty: 1000 };
-    expect(purchaseOrderRequest(masala, approved, a.analysisWeek)).toMatchObject({ sku: "FR-1001", quantity: 1000, reference: "FR-PLAN-2026-W42-FR-1001" });
-    expect(purchaseOrderRequest(masala, { ...approved, finalAction: "PAUSE_NEXT_ORDER", finalQty: 0 }, a.analysisWeek)).toBeNull();
+    const approved = { ...entry("SKU001", "APPROVED"), finalAction: "IMMEDIATE_REORDER" as const, finalQty: 600 };
+    expect(purchaseOrderRequest(mango, approved, a.analysisWeek)).toMatchObject({ sku: "SKU001", quantity: 600, reference: "FR-PLAN-2026-W42-SKU001" });
+    expect(purchaseOrderRequest(mango, { ...approved, finalAction: "PAUSE_NEXT_ORDER", finalQty: 0 }, a.analysisWeek)).toBeNull();
   });
 });

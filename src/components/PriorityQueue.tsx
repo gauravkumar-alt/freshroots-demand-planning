@@ -85,9 +85,9 @@ export function PriorityQueue({ limit = 10 }: { limit?: number }) {
                       size="sm"
                       variant="approve"
                       aria-label={`Approve ${r.product}`}
-                      onClick={() => {
-                        const res = store.decide(r, { kind: "APPROVE" });
-                        store.notify(res.ok ? `${r.product} approved. Raising the Zoho PO.` : res.error);
+                      onClick={async () => {
+                        const res = await store.decide(r, { kind: "APPROVE" });
+                        store.notify(res.ok ? `${r.product} approved.` : res.error);
                       }}
                     >
                       <Check /> Approve

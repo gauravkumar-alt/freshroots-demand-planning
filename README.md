@@ -8,11 +8,20 @@ Raghav uploads weekly data → rubric + data cleaning → Gemini trends and high
 
 ```bash
 npm install
-npm run dev      # http://localhost:3400, demo data loads automatically
+npm run dev      # http://localhost:3400, the Freshroots sample files load automatically
 npm test         # business-logic tests, including the 8 cases from the brief
 ```
 
-## Integrations (all optional)
+## Storage: Supabase
+
+Decisions, the audit log, uploaded files, retired rubric notes and quarter outcomes are saved in Supabase, so everyone sees the same state.
+
+1. Run `supabase/schema.sql` once in the project's SQL editor (creates `fr_*` tables; the audit table is append-only).
+2. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (server-side only; never exposed to the browser).
+
+Without them the server keeps everything in memory and the app shows a "not saved" banner.
+
+## Integrations
 
 Copy `.env.example` to `.env.local`. Each integration runs as a labelled simulation until its keys are set.
 
@@ -25,6 +34,7 @@ Copy `.env.example` to `.env.local`. Each integration runs as a labelled simulat
 ## Layout
 
 - `src/business`: rules, calculations, validation, decisions, kill switch, highlight validation. No React.
-- `src/data`: demo SAP and Zoho exports (60 SKUs, 24 distributors, 26 weeks) plus three weeks of decision history.
-- `src/components`, `src/app`: UI. `src/app/api`: Gemini, Zoho and email routes.
-- `src/state/store.tsx`: app state. The audit log is the source of truth for decisions, POs and kill-switch events.
+- `src/data`: the Freshroots sample files (15 SKUs, 4 distributors, weeks 27–42 of 2026), used until real files are uploaded.
+- `src/lib/server`: Supabase storage, the decision → kill-switch check → Zoho PO workflow, Gemini, Zoho and email.
+- `src/components`, `src/app`: UI and API routes.
+- `src/state/store.tsx`: client state, loaded from the server. The audit log is the source of truth for decisions, POs and kill-switch events.

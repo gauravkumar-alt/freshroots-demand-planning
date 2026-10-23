@@ -129,8 +129,8 @@ export function RecommendationTable({ filters, setFilters }: { filters: TableFil
             size="sm"
             variant="approve"
             disabled={chosen.length === 0}
-            onClick={() => {
-              const n = store.approveMany(chosen);
+            onClick={async () => {
+              const n = await store.approveMany(chosen);
               setSelected([]);
               store.notify(`${n} rule-based recommendation${n === 1 ? "" : "s"} approved.`);
             }}

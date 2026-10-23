@@ -1,6 +1,6 @@
 "use client";
 
-import { Play, RotateCcw } from "lucide-react";
+import { Play } from "lucide-react";
 import { DataUpload } from "@/components/DataUpload";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -27,13 +27,10 @@ export default function DataPage() {
         <div>
           <h1 className="text-[22px] font-semibold leading-tight">Data</h1>
           <p className="mt-0.5 max-w-3xl text-[13px] text-ink-3">
-            Raghav uploads the weekly SAP and Zoho CSV exports. The app validates them, cleans and standardises them, and combines them into one weekly analysis table. No direct SAP connection is needed.
+            Raghav uploads the weekly SAP and Zoho CSV exports. The app validates them, cleans and standardises them, and combines them into one weekly analysis table. Uploads are saved to Supabase, so everyone works from the same files. Until a file is uploaded, its slot uses the Freshroots sample file.
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => (store.resetDemo(), store.notify("Decisions cleared: fresh run on this dataset."))}>
-            <RotateCcw /> Reset decisions
-          </Button>
           <Button variant="primary" onClick={() => store.notify(store.runAnalysis().message)} disabled={!store.report.canRun}>
             <Play /> Run analysis on these files
           </Button>

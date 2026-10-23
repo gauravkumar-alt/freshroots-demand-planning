@@ -195,11 +195,12 @@ function QuarterRow({ id, label, ends, stockout, overstock }: { id: string; labe
   const total = recorded ? stockout! + overstock! : null;
   const complete = new Date() > new Date(ends + "T23:59:59+05:30");
 
-  const save = () => {
+  const save = async () => {
     const a = Number(so), b = Number(os);
     if (so === "" || os === "" || !Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b < 0) return setErr("Enter both losses in ₹ lakh, 0 or more.");
     setErr(null);
-    store.setOutcome({ quarter: id, stockoutLossLakh: a, overstockLossLakh: b });
+    const r = await store.setOutcome({ quarter: id, stockoutLossLakh: a, overstockLossLakh: b });
+    if (!r.ok) return setErr(r.error);
     store.notify(`${label} outcome recorded.`);
   };
 

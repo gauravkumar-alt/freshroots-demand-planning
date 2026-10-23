@@ -21,6 +21,18 @@ export const PILOT_QUARTERS = [
   { id: "FY27-Q4", label: "Q4 FY27 · Jan–Mar 2027", ends: "2027-03-31" },
 ] as const;
 
+/** Per weekly run: what the engine produced. */
+export interface RunSummary {
+  runId: string;
+  weekLabel: string;
+  generated: number;
+  ruleBased: number;
+  judgement: number;
+  stockout: number;
+  overstock: number;
+  highDemand: number;
+}
+
 export interface DecisionStats {
   decided: number;
   approved: number;
@@ -120,4 +132,24 @@ export function exposure(recs: Recommendation[]): Exposure {
     ruleBased: recs.filter((r) => r.decisionMode === "RULE_BASED").length,
     judgement: recs.filter((r) => r.decisionMode === "JUDGEMENT").length,
   };
+}
+
+export interface KillSwitchState {
+  check: KillSwitchCheck;
+  /** Fired and not resumed: PO creation is halted. */
+  active: boolean;
+  /** Breached now, and not already handled (fired, or resumed with no new rejections since). */
+  shouldFire: boolean;
+}
+
+/** Kill-switch state for one run, from that run's audit events. */
+export function killSwitchState(runAudit: AuditEntry[], runId: string): KillSwitchState {
+  const check = killSwitchCheck(runAudit, runId);
+  const events = runAudit
+    .filter((e) => e.runId === runId && (e.type === "KILL_SWITCH" || e.type === "KILL_SWITCH_RESUMED"))
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const active = events[0]?.type === "KILL_SWITCH";
+  const resumed = events.find((e) => e.type === "KILL_SWITCH_RESUMED");
+  const shouldFire = check.breached && !active && !(resumed && Number(resumed.reference ?? 0) >= check.rejected);
+  return { check, active, shouldFire };
 }

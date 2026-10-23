@@ -39,6 +39,7 @@ export function DecisionActions({ rec, onDecided }: { rec: Recommendation; onDec
   const [reason, setReason] = React.useState("");
   const [category, setCategory] = React.useState<ExceptionCategory | "">(suggestedCategory(rec));
   const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
     setMode("idle");
@@ -56,22 +57,22 @@ export function DecisionActions({ rec, onDecided }: { rec: Recommendation; onDec
     onDecided?.();
   };
 
-  const approve = () => {
-    const res = store.decide(rec, { kind: "APPROVE" });
+  const run = async (input: Parameters<typeof store.decide>[1], message: string) => {
+    setBusy(true);
+    const res = await store.decide(rec, input);
+    setBusy(false);
     if (!res.ok) return setError(res.error);
-    done(`${rec.product} approved. Raising the Zoho PO.`);
+    done(message);
   };
+  const approve = () => run({ kind: "APPROVE" }, `${rec.product} approved.`);
   const saveEdit = () => {
     const n = Number(qty.replace(/,/g, ""));
-    const res = store.decide(rec, { kind: "EDIT", action, qty: Number.isFinite(n) ? n : -1, reason, category: category || null });
-    if (!res.ok) return setError(res.error);
-    done(`${rec.product} edited: ${ACTION_LABEL[action]}${n ? `, ${n.toLocaleString("en-IN")} units` : ""}.`);
+    return run(
+      { kind: "EDIT", action, qty: Number.isFinite(n) ? n : -1, reason, category: category || null },
+      `${rec.product} edited: ${ACTION_LABEL[action]}${n ? `, ${n.toLocaleString("en-IN")} units` : ""}.`,
+    );
   };
-  const saveReject = () => {
-    const res = store.decide(rec, { kind: "REJECT", reason, category: category || null });
-    if (!res.ok) return setError(res.error);
-    done(`${rec.product} rejected. Nothing goes to procurement.`);
-  };
+  const saveReject = () => run({ kind: "REJECT", reason, category: category || null }, `${rec.product} rejected. Nothing goes to procurement.`);
 
   if (status !== "NEEDS_REVIEW" && decision) {
     const po = store.poFor(rec.sku);
@@ -85,7 +86,7 @@ export function DecisionActions({ rec, onDecided }: { rec: Recommendation; onDec
           {po.kind === "CREATED" ? (
             <span className="ml-auto text-[12px] text-ink-3">PO raised; change it in Zoho</span>
           ) : (
-            <Button size="sm" variant="ghost" className="ml-auto" onClick={() => (store.reopen(rec), store.notify(`${rec.product} reopened for review.`))}>
+            <Button size="sm" variant="ghost" className="ml-auto" onClick={async () => { const r = await store.reopen(rec); store.notify(r.ok ? `${rec.product} reopened for review.` : r.error); }}>
               <RotateCcw /> Reopen
             </Button>
           )}
@@ -109,7 +110,7 @@ export function DecisionActions({ rec, onDecided }: { rec: Recommendation; onDec
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap gap-2">
-        <Button variant="approve" size="lg" onClick={approve} disabled={rec.action === "MANUAL_REVIEW"} title={rec.action === "MANUAL_REVIEW" ? "No system action to approve. Use Edit." : undefined}>
+        <Button variant="approve" size="lg" onClick={approve} disabled={busy || rec.action === "MANUAL_REVIEW"} title={rec.action === "MANUAL_REVIEW" ? "No system action to approve. Use Edit." : undefined}>
           <Check /> Approve
         </Button>
         <Button variant="edit" size="lg" onClick={() => (setMode(mode === "edit" ? "idle" : "edit"), setError(null))} aria-expanded={mode === "edit"}>
@@ -172,8 +173,8 @@ export function DecisionActions({ rec, onDecided }: { rec: Recommendation; onDec
           </div>
           {error && <p className="text-[12.5px] font-medium text-rejected">{error}</p>}
           <div className="flex gap-2">
-            <Button variant={mode === "edit" ? "primary" : "reject"} onClick={mode === "edit" ? saveEdit : saveReject}>
-              {mode === "edit" ? "Save edit and raise PO" : "Reject and add to rubric"}
+            <Button variant={mode === "edit" ? "primary" : "reject"} onClick={mode === "edit" ? saveEdit : saveReject} disabled={busy}>
+              {busy ? "Saving…" : mode === "edit" ? "Save edit and raise PO" : "Reject and add to rubric"}
             </Button>
             <Button variant="ghost" onClick={() => (setMode("idle"), setError(null))}>
               Cancel

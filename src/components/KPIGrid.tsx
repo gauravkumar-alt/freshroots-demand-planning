@@ -37,7 +37,7 @@ export function KPIGrid() {
 
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-      <Kpi label="SKUs analysed" value={recs.length} sub={store.isDemo ? "demo subset of 400 active SKUs" : "from the SKU master"} tone="bg-ink" href="/recommendations" />
+      <Kpi label="SKUs analysed" value={recs.length} sub="from the SKU master" tone="bg-ink" href="/recommendations" />
       <Kpi label="Stockout risks" value={ex.stockoutSkus} sub={`${units(ex.unitsShort)} units short of minimum cover`} tone="bg-stockout" href="/recommendations?risk=STOCKOUT" />
       <Kpi label="Overstock risks" value={ex.overstockSkus} sub={`${units(ex.unitsExcess)} units above maximum cover`} tone="bg-overstock" href="/recommendations?risk=OVERSTOCK" />
       <Kpi label="High-demand SKUs" value={highDemand} sub="4-wk avg >20% above 12-wk" tone="bg-demand" href="/recommendations?rule=HIGH_DEMAND" />

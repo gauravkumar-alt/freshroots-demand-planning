@@ -2,6 +2,8 @@ import "server-only";
 
 /** Server-side configuration. Each integration falls back to a labelled simulation when its keys are missing. */
 export const env = {
+  supabaseUrl: () => process.env.SUPABASE_URL || "",
+  supabaseServiceKey: () => process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   geminiKey: () => process.env.GEMINI_API_KEY || "",
   geminiModel: () => process.env.GEMINI_MODEL || "gemini-flash-latest",
   zohoClientId: () => process.env.ZOHO_CLIENT_ID || "",
@@ -19,6 +21,7 @@ export const env = {
 
 export function integrationStatus() {
   return {
+    supabase: Boolean(env.supabaseUrl() && env.supabaseServiceKey()),
     gemini: Boolean(env.geminiKey()),
     zoho: hasZoho(),
     email: Boolean(env.resendKey() && env.killSwitchEmail()),

@@ -115,7 +115,10 @@ export default function RulesPage() {
                   <div className="flex items-center gap-2">
                     <span className={cn("rounded-[4px] px-1.5 py-0.5 text-[11.5px] font-semibold", isActive || upcoming ? "bg-manual-bg text-manual" : "bg-normal-bg text-normal")}>{state}</span>
                     {(isActive || upcoming) && (
-                      <Button size="sm" variant="ghost" onClick={() => (store.retireNote(n.id), store.notify("Rubric note retired. It applies from the next analysis run."))}>
+                      <Button size="sm" variant="ghost" onClick={async () => {
+                          const r = await store.retireNote(n.id);
+                          store.notify(r.ok ? "Rubric note retired. It applies from the next analysis run." : r.error);
+                        }}>
                         Retire
                       </Button>
                     )}
