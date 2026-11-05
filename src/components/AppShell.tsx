@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 import { daysBetween, formatDate } from "@/business/dates";
+import { AmbientBackground, gsap, useGSAP, withMotion } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { KillSwitchBanner } from "./KillSwitchBanner";
@@ -33,14 +34,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const exportDate = analysis ? (store.report.dataset?.asOfDate ?? analysis.analysisWeek) : null;
   const age = exportDate ? Math.max(0, daysBetween(exportDate, todayIso())) : null;
 
+  const mainRef = React.useRef<HTMLElement>(null);
+  const toastRef = React.useRef<HTMLDivElement>(null);
+  // Each page's sections rise in, staggered, on navigation and first load.
+  useGSAP(
+    () =>
+      withMotion(() => {
+        const sections = mainRef.current?.querySelectorAll(":scope > div > *");
+        if (sections?.length) gsap.from(sections, { y: 18, autoAlpha: 0, duration: 0.55, ease: "power3.out", stagger: 0.06, clearProps: "transform,opacity,visibility" });
+      }),
+    { scope: mainRef, dependencies: [pathname, ready, !!analysis] },
+  );
+  useGSAP(
+    () =>
+      withMotion(() => {
+        if (toastRef.current) gsap.from(toastRef.current, { y: 16, autoAlpha: 0, scale: 0.96, duration: 0.35, ease: "back.out(1.6)" });
+      }),
+    { dependencies: [store.toast] },
+  );
+
   const onRun = () => {
     const res = store.runAnalysis();
     store.notify(res.message);
   };
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[232px_1fr]">
-      <aside className="border-b border-line bg-surface lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+    <div className="relative min-h-screen lg:grid lg:grid-cols-[232px_1fr]">
+      <AmbientBackground />
+      <aside className="glass relative z-10 border-b border-white/60 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-4 lg:block">
             <Link href="/" className="flex items-center gap-2.5">
@@ -99,8 +120,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="min-w-0">
-        <header className="border-b border-line bg-surface">
+      <div className="relative z-10 min-w-0">
+        <header className="glass sticky top-0 z-20 border-b border-white/60">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5 lg:px-6">
             <div className="flex min-w-0 items-center gap-2 text-[13px]">
               <ClipboardCheck className="size-4 text-ink-3" />
@@ -130,7 +151,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Supabase is not connected. Decisions are kept only until the server restarts. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to save them.
           </div>
         )}
-        <main className="px-4 py-5 lg:px-6">
+        <main ref={mainRef} className="px-4 py-5 lg:px-6">
           {!ready ? (
             <Loading />
           ) : store.loadError ? (
@@ -147,7 +168,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {ready && <RecommendationDetail />}
       {store.toast && (
-        <div role="status" className="fixed bottom-4 left-1/2 z-[80] -translate-x-1/2 rounded-md bg-ink px-4 py-2.5 text-[13px] font-medium text-white shadow-lg">
+        <div ref={toastRef} role="status" className="fixed bottom-4 left-1/2 z-[80] -translate-x-1/2 rounded-md bg-ink/90 px-4 py-2.5 text-[13px] font-medium text-white shadow-lg backdrop-blur-md">
           {store.toast}
         </div>
       )}

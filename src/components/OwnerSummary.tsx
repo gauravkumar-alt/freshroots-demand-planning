@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 import { pct, rupees } from "@/business/format";
+import { AnimatedNumber } from "@/lib/motion";
 import { backtest } from "@/business/outcomes";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
@@ -25,28 +26,28 @@ export function OwnerSummary() {
   const tiles = [
     {
       label: "Margin at risk",
-      value: hasMoney ? rupees(marginAtRisk) : "—",
+      value: hasMoney ? <AnimatedNumber value={marginAtRisk} format={rupees} /> : "—",
       sub: hasMoney ? `${skus(recs.filter((r) => r.economics.valueKind === "MARGIN_AT_RISK").length)} below minimum cover` : "Add cost and price to the SKU master",
       tone: "bg-stockout",
       href: "/recommendations?risk=STOCKOUT",
     },
     {
       label: "Cash tied up in overstock",
-      value: hasMoney ? rupees(cashTied) : "—",
+      value: hasMoney ? <AnimatedNumber value={cashTied} format={rupees} /> : "—",
       sub: hasMoney ? `${skus(recs.filter((r) => r.economics.valueKind === "CASH_TIED_UP").length)} above maximum cover` : "Add unit cost to the SKU master",
       tone: "bg-overstock",
       href: "/recommendations?risk=OVERSTOCK",
     },
     {
       label: "Decisions waiting",
-      value: String(pending.length),
+      value: <AnimatedNumber value={pending.length} format={(n) => String(Math.round(n))} duration={0.6} />,
       sub: urgent.length ? `${urgent.length} run${urgent.length === 1 ? "s" : ""} out before an order can arrive` : pending.length ? "none run out before delivery" : "nothing needs you this week",
       tone: urgent.length ? "bg-stockout" : "bg-review",
       href: "#inbox",
     },
     {
       label: "Forecast accuracy",
-      value: bt?.wape == null ? "—" : `${Math.round((1 - bt.wape) * 100)}%`,
+      value: bt?.wape == null ? "—" : <AnimatedNumber value={Math.round((1 - bt.wape) * 100)} format={(n) => `${Math.round(n)}%`} />,
       sub:
         bt?.bias == null
           ? "needs 5+ weeks of sales"

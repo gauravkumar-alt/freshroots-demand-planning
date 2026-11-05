@@ -5,6 +5,7 @@ import * as React from "react";
 import { formatDate } from "@/business/dates";
 import { rupees, units } from "@/business/format";
 import type { Recommendation } from "@/business/types";
+import { gsap, prefersMotion, useStaggerIn } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ActionText, JudgementTag, RiskBadge } from "./RuleBadge";
@@ -28,6 +29,7 @@ export function DecisionInbox() {
   const store = useStore();
   const recs = store.analysis?.recommendations ?? [];
   const [busy, setBusy] = React.useState<string | null>(null);
+  const listRef = React.useRef<HTMLUListElement>(null);
 
   const flagged = recs.filter((r) => r.risk !== "NONE" || r.decisionMode === "JUDGEMENT");
   const pending = flagged.filter((r) => store.statusOf(r.sku) === "NEEDS_REVIEW");
@@ -37,19 +39,35 @@ export function DecisionInbox() {
   );
   const noChange = routine.filter((r) => r.action === "NO_ACTION").length;
   const decided = flagged.length - pending.length;
+  useStaggerIn(listRef, [pending.length === 0]);
 
-  const approve = async (r: Recommendation) => {
-    setBusy(r.sku);
-    const res = await store.decide(r, { kind: "APPROVE" });
-    setBusy(null);
-    store.notify(res.ok ? `${r.product} approved.` : res.error);
+  /** Slide a row out, then record the decision; slide it back if the server refuses. */
+  const leave = async (skusToGo: string[], act: () => Promise<boolean>) => {
+    const rows = skusToGo.map((s) => listRef.current?.querySelector<HTMLElement>(`[data-sku="${s}"]`)).filter((r): r is HTMLElement => !!r);
+    if (rows.length && prefersMotion()) await gsap.to(rows, { x: 48, autoAlpha: 0, duration: 0.32, ease: "power2.in", stagger: 0.03 });
+    const ok = await act();
+    if (!ok && rows.length) gsap.to(rows, { x: 0, autoAlpha: 1, duration: 0.25, clearProps: "transform,opacity,visibility" });
   };
-  const approveRoutine = async () => {
-    setBusy("all");
-    const n = await store.approveMany(routine);
-    setBusy(null);
-    store.notify(`${n} routine recommendation${n === 1 ? "" : "s"} approved.`);
-  };
+
+  const approve = (r: Recommendation) =>
+    leave([r.sku], async () => {
+      setBusy(r.sku);
+      const res = await store.decide(r, { kind: "APPROVE" });
+      setBusy(null);
+      store.notify(res.ok ? `${r.product} approved.` : res.error);
+      return res.ok;
+    });
+  const approveRoutine = () =>
+    leave(
+      routine.map((r) => r.sku),
+      async () => {
+        setBusy("all");
+        const n = await store.approveMany(routine);
+        setBusy(null);
+        store.notify(`${n} routine recommendation${n === 1 ? "" : "s"} approved.`);
+        return n > 0;
+      },
+    );
 
   return (
     <Card id="inbox" className="scroll-mt-4">
@@ -73,12 +91,12 @@ export function DecisionInbox() {
           </div>
         </div>
       ) : (
-        <ul className="divide-y divide-line">
+        <ul ref={listRef} className="divide-y divide-line">
           {pending.map((r) => {
             const e = r.economics;
             const urgent = (e.stockoutGapDays ?? 0) > 0;
             return (
-              <li key={r.sku} className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3", urgent && "bg-stockout-bg/40")}>
+              <li key={r.sku} data-sku={r.sku} className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3", urgent && "bg-stockout-bg/50")}>
                 <button type="button" onClick={() => store.openDetail(r.sku)} className="group min-w-0 flex-1 basis-[280px] text-left">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-[14px] font-semibold group-hover:underline">{r.product}</span>

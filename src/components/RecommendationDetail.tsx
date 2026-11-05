@@ -7,6 +7,7 @@ import { formatDate } from "@/business/dates";
 import { pct, rupees, units, weeks } from "@/business/format";
 import { ACTION_LABEL } from "@/business/labels";
 import type { Recommendation } from "@/business/types";
+import { gsap, useGSAP, withMotion } from "@/lib/motion";
 import { cn, formatTime, shortDistributor } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { DecisionActions } from "./DecisionActions";
@@ -55,6 +56,15 @@ function Metric({ label, value, sub, tone }: { label: string; value: React.React
 
 function DetailBody({ rec }: { rec: Recommendation }) {
   const store = useStore();
+  const bodyRef = React.useRef<HTMLDivElement>(null);
+  useGSAP(
+    () =>
+      withMotion(() => {
+        const parts = bodyRef.current?.querySelectorAll(":scope > *");
+        if (parts?.length) gsap.from(parts, { x: 28, autoAlpha: 0, duration: 0.45, ease: "power3.out", stagger: 0.04, clearProps: "transform,opacity,visibility" });
+      }),
+    { scope: bodyRef, dependencies: [rec.sku] },
+  );
   const status = store.statusOf(rec.sku);
   const history = store.audit.filter((e) => e.sku === rec.sku && e.type !== "ANALYSIS_RUN").slice(0, 6);
   const coverAfter =
@@ -62,7 +72,7 @@ function DetailBody({ rec }: { rec: Recommendation }) {
   const wosTone = rec.risk === "STOCKOUT" ? "text-stockout" : rec.risk === "OVERSTOCK" ? "text-overstock" : undefined;
 
   return (
-    <div className="grid gap-5 px-5 pb-6 pt-5">
+    <div ref={bodyRef} className="grid gap-5 px-5 pb-6 pt-5">
       {/* Identity + the one-line answer */}
       <div className="pr-8">
         <p className="font-mono text-[12px] text-ink-3">

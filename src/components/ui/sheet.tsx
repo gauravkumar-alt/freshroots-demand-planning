@@ -10,9 +10,9 @@ export const Sheet = DialogPrimitive.Root;
 export function SheetContent({ children, className, title, description }: { children: React.ReactNode; className?: string; title: string; description?: string }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ink/25" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ink/15 backdrop-blur-[2px]" />
       <DialogPrimitive.Content
-        className={cn("fixed inset-y-0 right-0 z-50 flex w-full max-w-[760px] flex-col border-l border-line bg-bg shadow-2xl focus:outline-none", className)}
+        className={cn("fixed inset-y-0 right-0 z-50 flex w-full max-w-[760px] flex-col glass-strong border-l border-white/70 focus:outline-none", className)}
       >
         <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
         <DialogPrimitive.Description className="sr-only">{description ?? title}</DialogPrimitive.Description>
@@ -30,8 +30,8 @@ export const Dialog = DialogPrimitive.Root;
 export function DialogContent({ children, title, description }: { children: React.ReactNode; title: string; description?: string }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-[60] bg-ink/30" />
-      <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-[70] w-[calc(100%-32px)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 rounded-md border border-line bg-surface p-5 shadow-2xl focus:outline-none">
+      <DialogPrimitive.Overlay className="fixed inset-0 z-[60] bg-ink/20 backdrop-blur-[3px]" />
+      <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-[70] w-[calc(100%-32px)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 rounded-md border border-white/70 bg-surface glass-strong p-5 focus:outline-none">
         <DialogPrimitive.Title className="text-[15px] font-semibold">{title}</DialogPrimitive.Title>
         {description && <DialogPrimitive.Description className="mt-1 text-[13px] text-ink-2">{description}</DialogPrimitive.Description>}
         <div className="mt-4">{children}</div>
