@@ -42,6 +42,21 @@
 
   --info: #49606f;
   --info-bg: #eaf0f3;
+
+  /* Chart colours (validated reference palette): status for stock state, a blue/red diverging pair for
+     demand change, categorical slots 1–2 for actual vs forecast. Text never wears these. */
+  --viz-critical: #d03b3b;
+  --viz-good: #0ca30c;
+  --viz-warning: #fab219;
+  --viz-up: #2a78d6;
+  --viz-down: #e34948;
+  --viz-actual: #2a78d6;
+  --viz-forecast: #eb6834;
+  --viz-band: rgba(12, 163, 12, 0.11);
+  --viz-band-edge: rgba(12, 120, 12, 0.38);
+  --viz-grid: rgba(22, 44, 34, 0.08);
+  --viz-axis: #66706a;
+  --viz-festival: rgba(242, 184, 75, 0.15);
   color-scheme: light;
 }
 
