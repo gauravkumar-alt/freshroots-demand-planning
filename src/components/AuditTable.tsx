@@ -3,6 +3,8 @@
 import * as React from "react";
 import { units } from "@/business/format";
 import { ACTION_LABEL } from "@/business/labels";
+import { poNumberOf } from "@/business/purchaseOrder";
+import Link from "next/link";
 import type { AuditEntry, AuditEventType } from "@/business/types";
 import { cn, formatTime } from "@/lib/utils";
 import { useStore } from "@/state/store";
@@ -16,7 +18,7 @@ const TYPE: Record<AuditEventType, { label: string; cls: string }> = {
   REOPENED: { label: "Reopened", cls: "bg-review-bg text-review" },
   ANALYSIS_RUN: { label: "Analysis run", cls: "bg-normal-bg text-normal" },
   EXPORT: { label: "CSV export", cls: "bg-normal-bg text-normal" },
-  PO_CREATED: { label: "Zoho PO", cls: "bg-approved-bg text-approved" },
+  PO_CREATED: { label: "Purchase order", cls: "bg-approved-bg text-approved" },
   PO_FAILED: { label: "PO failed", cls: "bg-rejected-bg text-rejected" },
   PO_HELD: { label: "PO held", cls: "bg-rejected-bg text-rejected" },
   KILL_SWITCH: { label: "Kill switch", cls: "bg-rejected text-white" },
@@ -37,7 +39,7 @@ export function AuditTable() {
     if (type === "DECISIONS" ? !["APPROVED", "EDITED", "REJECTED", "REOPENED"].includes(e.type) : type && e.type !== type) return false;
     if (run && e.runId !== run) return false;
     const s = q.trim().toLowerCase();
-    if (s && !`${e.sku ?? ""} ${e.product ?? ""} ${e.reason}`.toLowerCase().includes(s)) return false;
+    if (s && !`${e.sku ?? ""} ${e.product ?? ""} ${e.reason} ${e.type === "PO_CREATED" ? poNumberOf(e) : ""}`.toLowerCase().includes(s)) return false;
     return true;
   });
 
@@ -97,7 +99,17 @@ export function AuditTable() {
               <Td className="text-[12.5px]">{["APPROVED", "EDITED", "REJECTED"].includes(e.type) ? act(e.systemAction, e.systemQty) : "—"}</Td>
               <Td className="text-[12.5px] font-medium">{e.type === "REJECTED" ? <span className="text-rejected">Rejected</span> : ["APPROVED", "EDITED"].includes(e.type) ? act(e.finalAction, e.finalQty) : "—"}</Td>
               <Td className="min-w-[240px] text-[12.5px] text-ink-2">
-                {e.reason || <span className="text-ink-3">As recommended</span>}
+                {e.type === "PO_CREATED" ? (
+                  <>
+                    Purchase order{" "}
+                    <Link href={`/po/${poNumberOf(e)}`} className="font-medium text-ink underline-offset-2 hover:underline">
+                      {poNumberOf(e)}
+                    </Link>
+                    {e.finalQty ? ` for ${units(e.finalQty)} units.` : "."}
+                  </>
+                ) : (
+                  e.reason || <span className="text-ink-3">As recommended</span>
+                )}
                 {e.exceptionCategory && <span className="mt-0.5 block text-[11.5px] text-ink-3">{e.exceptionCategory}</span>}
               </Td>
               <Td className="whitespace-nowrap text-[12.5px] text-ink-2">

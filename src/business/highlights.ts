@@ -50,7 +50,7 @@ export function highlightFacts(a: AnalysisResult): HighlightFacts {
 }
 
 export const HIGHLIGHT_SYSTEM = `You write the weekly demand-planning highlights for Raghav Kulkarni, Senior Demand Planner at Freshroots, a regional FMCG company in Maharashtra and Goa.
-You receive facts the application has already calculated from SAP and Zoho exports.
+You receive facts the application has already calculated from the uploaded weekly files.
 Rules:
 - Write 4 to 6 highlights, most important first: stockout risks, demand trends by category, overstock, and cases that need Raghav's judgement.
 - Group SKUs where they share a pattern (e.g. several namkeen SKUs rising ahead of Diwali).

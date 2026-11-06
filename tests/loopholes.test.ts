@@ -12,7 +12,7 @@ import { recordDecisions } from "@/lib/server/workflow";
 const a = runAnalysis(validateAndPrepare(freshrootsRawFiles()).dataset!, "2026-11-06T04:00:00Z");
 const ctx = { runId: a.runId, analysisWeek: a.analysisWeek, weekLabel: a.weekLabel };
 const deps = () => ({
-  createPurchaseOrder: vi.fn(async () => ({ ok: true, mode: "simulated" as const, poNumber: "SIM-PO-1" })),
+  createPurchaseOrder: vi.fn(async (po: { reference: string }) => ({ ok: true, poNumber: po.reference })),
   sendKillSwitchEmail: vi.fn(async () => ({ ok: true, mode: "preview" as const, to: null, subject: "x" })),
 });
 
@@ -45,11 +45,11 @@ describe("Loophole: events posted straight to the server", () => {
     return repo.auditForRun(a.runId);
   }
 
-  it("will not reopen a decision whose Zoho PO is already raised", async () => {
+  it("will not reopen a decision whose purchase order is already raised", async () => {
     const audit = await approved();
     const res = buildClientEvents([{ type: "REOPENED", runId: a.runId, sku: "SKU001" }], audit, a, now);
     expect(res).toMatchObject({ ok: false, status: 409 });
-    if (!res.ok) expect(res.error).toMatch(/already raised in Zoho/);
+    if (!res.ok) expect(res.error).toMatch(/already raised/);
   });
 
   it("will not resume a kill switch that is not active, or without a reason", async () => {
@@ -96,9 +96,9 @@ describe("Loophole: CSV export from a stale browser view", () => {
     const out = procurementCsv(a, (await repo.state()).audit);
     expect(out.count).toBe(2);
     const rows = parseCsv(out.csv).rows;
-    expect(rows.map((r) => [r.SKU, r["Approved quantity"], r.Decision, r["Zoho PO"]])).toEqual([
-      ["SKU001", "750", "Approved", "SIM-PO-1"],
-      ["SKU003", "200", "Edited", "SIM-PO-1"],
+    expect(rows.map((r) => [r.SKU, r["Approved quantity"], r.Decision, r["PO number"]])).toEqual([
+      ["SKU001", "750", "Approved", "FR-PO-2026-W42-001"],
+      ["SKU003", "200", "Edited", "FR-PO-2026-W42-003"],
     ]);
   });
 });

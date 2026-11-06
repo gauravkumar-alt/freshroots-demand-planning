@@ -84,7 +84,7 @@ export function DecisionActions({ rec, onDecided }: { rec: Recommendation; onDec
             by {decision.user} · {formatTime(decision.timestamp)}
           </span>
           {po.kind === "CREATED" ? (
-            <span className="ml-auto text-[12px] text-ink-3">PO raised; change it in Zoho</span>
+            <span className="ml-auto text-[12px] text-ink-3">Purchase order raised</span>
           ) : (
             <Button size="sm" variant="ghost" className="ml-auto" onClick={async () => { const r = await store.reopen(rec); store.notify(r.ok ? `${rec.product} reopened for review.` : r.error); }}>
               <RotateCcw /> Reopen

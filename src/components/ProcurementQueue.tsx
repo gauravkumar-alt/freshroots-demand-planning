@@ -33,7 +33,7 @@ export function ProcurementQueue() {
     <Card>
       <CardHeader
         title="Procurement queue"
-        description={`${items.length} approved · ${reorders.length} reorders (${units(units_)} units${hasCost ? `, ${rupees(spend)} at cost` : ""}) · ${created.length} POs raised in Zoho${store.integrations?.zoho ? "" : " (simulated: no Zoho credentials)"}`}
+        description={`${items.length} approved · ${reorders.length} reorders (${units(units_)} units${hasCost ? `, ${rupees(spend)} at cost` : ""}) · ${created.length} purchase order${created.length === 1 ? "" : "s"} raised`}
         action={
           <>
             {retryable.length > 0 && (
@@ -75,7 +75,7 @@ export function ProcurementQueue() {
               <Th>Decision</Th>
               <Th>Approved</Th>
               <Th>Reason</Th>
-              <Th>Zoho PO</Th>
+              <Th>Purchase order</Th>
             </tr>
           </thead>
           <tbody>

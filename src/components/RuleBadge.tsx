@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ACTION_LABEL, RISK_LABEL, RULE_LABEL, STATUS_LABEL } from "@/business/labels";
 import type { ActionCode, DecisionStatus, RiskLevel, RuleCode } from "@/business/types";
 import { cn, formatTime } from "@/lib/utils";
@@ -79,9 +80,9 @@ export function PoStatus({ po }: { po: PoState }) {
   switch (po.kind) {
     case "CREATED":
       return (
-        <span className={cn(pill, "bg-approved-bg text-approved")} title={`Raised ${formatTime(po.at)}`}>
-          {po.simulated ? "Simulated Zoho PO" : "Zoho PO"} {po.poNumber}
-        </span>
+        <Link href={`/po/${po.poNumber}`} className={cn(pill, "bg-approved-bg text-approved hover:underline")} title={`Raised ${formatTime(po.at)}. Open the purchase order.`} onClick={(e) => e.stopPropagation()}>
+          PO {po.poNumber}
+        </Link>
       );
     case "HELD":
       return <span className={cn(pill, "bg-rejected text-white")}>Held by kill switch</span>;

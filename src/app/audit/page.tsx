@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AuditTable } from "@/components/AuditTable";
 import { ExceptionLibrary } from "@/components/ExceptionLibrary";
+import { BusinessImpact } from "@/components/BusinessImpact";
 import { OutcomesPanel } from "@/components/OutcomesPanel";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +17,7 @@ export default function AuditPage() {
       <div>
         <h1 className="text-[22px] font-semibold leading-tight">Audit Log</h1>
         <p className="mt-0.5 max-w-3xl text-[13px] text-ink-3">
-          Every analysis run, decision, Zoho PO, kill-switch event and email, with the original recommendation, the final decision, the reason, the user and the time.
+          Every run, decision and purchase order.
         </p>
       </div>
       <div className="flex gap-1 border-b border-line" role="tablist">
@@ -38,7 +39,12 @@ export default function AuditPage() {
           </button>
         ))}
       </div>
-      {tab === "log" ? <AuditTable /> : tab === "exceptions" ? <ExceptionLibrary /> : <OutcomesPanel />}
+      {tab === "log" ? <AuditTable /> : tab === "exceptions" ? <ExceptionLibrary /> : (
+        <div className="grid gap-4">
+          <OutcomesPanel />
+          <BusinessImpact />
+        </div>
+      )}
     </div>
   );
 }

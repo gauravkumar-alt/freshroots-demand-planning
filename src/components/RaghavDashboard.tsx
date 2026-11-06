@@ -377,7 +377,7 @@ export function RaghavDashboard({ actions }: { actions?: React.ReactNode }) {
         title="Needs your decision"
         caption={
           pendingRecs.length
-            ? `${pendingRecs.length} SKU${pendingRecs.length === 1 ? "" : "s"} waiting, most urgent first. Bar = weeks of stock; shaded band = target (6–14 weeks, 3–4 for perishables). Click a row to decide.`
+            ? `${pendingRecs.length} SKU${pendingRecs.length === 1 ? "" : "s"} waiting, most urgent first.`
             : "Every flagged SKU has a decision."
         }
         legend={
@@ -394,11 +394,6 @@ export function RaghavDashboard({ actions }: { actions?: React.ReactNode }) {
         <DecisionChart recs={pendingRecs} onOpen={store.openDetail} />
       </ChartCard>
 
-      {placeholder && (
-        <p className="text-[12px] text-review">
-          ₹ figures and run-out dates use placeholder cost, price and lead-time values in the sample SKU master. Upload your SKU master with Unit_Cost, Selling_Price and Lead_Time_Days to use real ones.
-        </p>
-      )}
     </div>
   );
 }

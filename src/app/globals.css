@@ -166,3 +166,9 @@ h3 {
     animation: none !important;
   }
 }
+
+/* Printing a purchase order: plain white page, no background art. */
+@media print {
+  body { background: #fff !important; }
+  [aria-hidden="true"].pointer-events-none { display: none !important; }
+}

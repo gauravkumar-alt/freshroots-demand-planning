@@ -68,11 +68,11 @@ function Slot({ kind }: { kind: FileKind }) {
           <p className="text-[14px] font-semibold">{spec.label}</p>
         </div>
         <span className={cn("rounded-[4px] px-1.5 py-0.5 text-[11px] font-semibold", !ok ? "bg-rejected-bg text-rejected" : up ? "bg-approved-bg text-approved" : !rep.provided ? "bg-normal-bg text-normal" : "bg-review-bg text-review")}>
-          {!ok ? "Blocked" : up ? "Uploaded" : !rep.provided ? "Optional" : "Sample"}
+          {!ok ? "Blocked" : up ? "Uploaded" : !rep.provided ? "Optional" : "Loaded"}
         </span>
       </div>
       <p className="mt-1.5 truncate text-[12.5px] text-ink-2" title={up?.name}>
-        {up ? `${up.name} · ${formatTime(up.uploadedAt)}` : FRESHROOTS_FILE_NAMES[kind] ? `Sample: ${FRESHROOTS_FILE_NAMES[kind]}` : "Not provided"}
+        {up ? `${up.name} · ${formatTime(up.uploadedAt)}` : FRESHROOTS_FILE_NAMES[kind] ? FRESHROOTS_FILE_NAMES[kind]! : "Not provided"}
       </p>
       <p className="mt-0.5 text-[12.5px] tnum">
         <span className="font-semibold">{rep.rowsAccepted.toLocaleString("en-IN")}</span>
@@ -86,10 +86,10 @@ function Slot({ kind }: { kind: FileKind }) {
         </Button>
         {up && (
           <Button size="sm" variant="ghost" disabled={busy} onClick={remove}>
-            <RotateCcw /> {FRESHROOTS_FILE_NAMES[kind] ? "Use sample" : "Remove"}
+            <RotateCcw /> {FRESHROOTS_FILE_NAMES[kind] ? "Use previous file" : "Remove"}
           </Button>
         )}
-        <Button size="sm" variant="ghost" onClick={template} title="Download the sample file, or a header-only template">
+        <Button size="sm" variant="ghost" onClick={template} title="Download the file format">
           <Download /> Template
         </Button>
       </div>

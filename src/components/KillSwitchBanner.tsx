@@ -20,7 +20,7 @@ export function KillSwitchBanner() {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 lg:px-6">
         <OctagonAlert className="size-5 shrink-0" />
         <p className="min-w-0 flex-1 text-[13px]">
-          <span className="font-semibold">Kill switch fired.</span> {ks.rejected} of {ks.decided} decisions this week were rejected ({((ks.rate ?? 0) * 100).toFixed(1)}%, above 50%). Zoho PO creation is halted
+          <span className="font-semibold">Kill switch fired.</span> {ks.rejected} of {ks.decided} decisions this week were rejected ({((ks.rate ?? 0) * 100).toFixed(1)}%, above 50%). Purchase orders are on hold
           {held ? ` (${held} held)` : ""}. {ks.lastEmail ? ks.lastEmail.reason : "Sending email…"}
         </p>
         <Dialog open={open} onOpenChange={setOpen}>

@@ -2,10 +2,8 @@
 
 import { Mail } from "lucide-react";
 import * as React from "react";
-import { BusinessImpact } from "@/components/BusinessImpact";
 import { DecisionInbox } from "@/components/DecisionInbox";
 import { NoAnalysis } from "@/components/EmptyStates";
-import { AutomationSplit, KPIGrid } from "@/components/KPIGrid";
 import { RaghavDashboard } from "@/components/RaghavDashboard";
 import { TrendsHighlights } from "@/components/TrendsHighlights";
 import { Button } from "@/components/ui/button";
@@ -17,20 +15,9 @@ export default function OverviewPage() {
 
   return (
     <div className="grid min-w-0 gap-5">
-      {/* Raghav's dashboard first, then his decisions, then the story and the deeper analysis. */}
       <RaghavDashboard actions={<EmailDigestButton />} />
       <DecisionInbox />
       <TrendsHighlights />
-
-      <section className="grid gap-3">
-        <h2 className="text-[16px] font-semibold">This week at a glance</h2>
-        <KPIGrid />
-        <AutomationSplit />
-      </section>
-      <section id="impact" className="grid scroll-mt-4 gap-3">
-        <h2 className="text-[16px] font-semibold">Business impact and kill criteria</h2>
-        <BusinessImpact />
-      </section>
     </div>
   );
 }

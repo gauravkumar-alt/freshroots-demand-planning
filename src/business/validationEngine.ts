@@ -16,7 +16,7 @@ export type FileKind = "sales" | "inventory" | "skuMaster" | "purchaseOrders" | 
 export type CoreFileKind = "sales" | "inventory" | "skuMaster" | "purchaseOrders";
 export const FILE_KINDS: FileKind[] = ["sales", "inventory", "skuMaster", "purchaseOrders", "distributors", "calendar"];
 
-export const FILE_SPECS: Record<FileKind, { label: string; system: "SAP" | "Zoho Inventory" | "Master data"; columns: { key: string; label: string; aliases: string[]; required: boolean }[] }> = {
+export const FILE_SPECS: Record<FileKind, { label: string; system: "SAP" | "Purchasing" | "Master data"; columns: { key: string; label: string; aliases: string[]; required: boolean }[] }> = {
   sales: {
     label: "Sales",
     system: "SAP",
@@ -55,7 +55,7 @@ export const FILE_SPECS: Record<FileKind, { label: string; system: "SAP" | "Zoho
   },
   purchaseOrders: {
     label: "Purchase orders",
-    system: "Zoho Inventory",
+    system: "Purchasing",
     columns: [
       { key: "sku", label: "SKU", aliases: ["sku", "skuid", "skucode", "item", "itemsku"], required: true },
       { key: "distributor", label: "Distributor", aliases: ["distributor", "distributorname", "vendor", "customer"], required: true },
@@ -176,7 +176,7 @@ export function validateAndPrepare(files: Partial<Record<FileKind, RawFile>>): V
       reports.push({ kind, provided: false, rowsRead: 0, rowsAccepted: 0, missingColumns: [] });
       const optional = OPTIONAL_FILES.includes(kind);
       const optionalMessage: Partial<Record<FileKind, string>> = {
-        purchaseOrders: "No Zoho purchase-order file. Recommendations will run without open-order context.",
+        purchaseOrders: "No open purchase-order file. Recommendations run without open orders.",
         distributors: "No distributor master. Distributors are shown by the name or ID in the other files.",
         calendar: "No festival calendar. Using the documented festival months: October, November and March.",
       };

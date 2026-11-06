@@ -5,7 +5,7 @@ import { killSwitchCheck } from "@/business/measurement";
 import { activeRubricNotes, runAnalysis } from "@/business/recommendationEngine";
 import type { AuditEntry } from "@/business/types";
 import { validateAndPrepare } from "@/business/validationEngine";
-import { purchaseOrderRequest } from "@/business/zohoPurchaseOrder";
+import { poNumberOf, purchaseOrderDocument, purchaseOrderRequest } from "@/business/purchaseOrder";
 import { freshrootsRawFiles } from "@/data/freshrootsFiles";
 
 const entry = (sku: string, type: "APPROVED" | "REJECTED", runId = "2026-W42", i = 0): AuditEntry => ({
@@ -103,13 +103,23 @@ describe("Gemini highlights only write words", () => {
   });
 });
 
-describe("PO on Zoho", () => {
+describe("Purchase orders raised in the app", () => {
   const a = runAnalysis(validateAndPrepare(freshrootsRawFiles()).dataset!, "2026-10-19T07:30:00Z");
   const mango = a.recommendations.find((r) => r.sku === "SKU001")!;
-  it("raises a PO only for approved reorders, at the approved quantity", () => {
-    const approved = { ...entry("SKU001", "APPROVED"), finalAction: "IMMEDIATE_REORDER" as const, finalQty: 600 };
-    expect(purchaseOrderRequest(mango, approved, a.analysisWeek)).toMatchObject({ sku: "SKU001", quantity: 600, reference: "FR-PLAN-2026-W42-SKU001" });
-    expect(purchaseOrderRequest(mango, { ...approved, finalAction: "PAUSE_NEXT_ORDER", finalQty: 0 }, a.analysisWeek)).toBeNull();
+  const approved = { ...entry("SKU001", "APPROVED"), finalAction: "IMMEDIATE_REORDER" as const, finalQty: 600 };
+  it("raises a PO only for approved reorders, at the approved quantity, with a fixed number", () => {
+    expect(purchaseOrderRequest(mango, approved)).toMatchObject({ sku: "SKU001", quantity: 600, reference: "FR-PO-2026-W42-001" });
+    expect(purchaseOrderRequest(mango, { ...approved, finalAction: "PAUSE_NEXT_ORDER", finalQty: 0 })).toBeNull();
+  });
+  it("gives older PO entries the same fixed number", () => {
+    expect(poNumberOf({ runId: "2026-W42", sku: "SKU013", reference: "SIM-PO-16853" })).toBe("FR-PO-2026-W42-013");
+  });
+  it("builds the printed PO: quantity × unit cost, delivery after the lead time", () => {
+    const po = { ...approved, id: "po", type: "PO_CREATED" as const, timestamp: "2026-11-04T04:59:00Z", user: "System", reference: "FR-PO-2026-W42-001" };
+    const doc = purchaseOrderDocument(po, approved, mango);
+    expect(doc).toMatchObject({ number: "FR-PO-2026-W42-001", quantity: 600, approvedBy: approved.user });
+    expect(doc.total).toBe(600 * mango.economics.unitCost!);
+    expect(doc.expectedDelivery).toBe(new Date(Date.parse("2026-11-04") + mango.economics.leadTimeDays! * 864e5).toISOString().slice(0, 10));
   });
 });
 

@@ -132,7 +132,7 @@ export function evaluateSku(
       const coverWithPo = ((sku.currentStock ?? 0) + po.openQty) / adjustedDemand;
       if (coverWithPo >= window.min) {
         judgement.push(
-          `Open Zoho PO of ${units(po.openQty)} units due ${formatDate(po.nextDelivery, { day: "numeric", month: "short" })} would lift cover to ${weeks(coverWithPo)} weeks.`,
+          `Open PO of ${units(po.openQty)} units due ${formatDate(po.nextDelivery, { day: "numeric", month: "short" })} would lift cover to ${weeks(coverWithPo)} weeks.`,
         );
       }
     }
@@ -335,7 +335,7 @@ function explanationFor(r: Recommendation, highDemand: boolean): string[] {
     lines.push(`${units(e.excessUnits)} units sit above the ${r.window.max}-week maximum, tying up ${rupees(e.valueAtRisk)} at cost.`);
   }
   if (r.openPoQty > 0 && r.nextDelivery) {
-    lines.push(`Zoho shows ${units(r.openPoQty)} units on open orders, next delivery ${formatDate(r.nextDelivery, { day: "numeric", month: "short" })}.`);
+    lines.push(`${units(r.openPoQty)} units on open orders, next delivery ${formatDate(r.nextDelivery, { day: "numeric", month: "short" })}.`);
   }
   return lines;
 }

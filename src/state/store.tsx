@@ -4,6 +4,7 @@
 // in Supabase; this store loads it, keeps it fresh, and derives statuses from the audit log.
 // The analysis itself runs in the browser from the current files: it is deterministic and needs no server.
 
+import { poNumberOf } from "@/business/purchaseOrder";
 import * as React from "react";
 import { REVIEWER } from "@/business/config";
 import { parseCsv, toCsv } from "@/business/csv";
@@ -29,7 +30,7 @@ export interface UploadedFile {
 export type PoState =
   | { kind: "NOT_NEEDED" }
   | { kind: "PENDING" }
-  | { kind: "CREATED"; poNumber: string; simulated: boolean; at: string }
+  | { kind: "CREATED"; poNumber: string; at: string }
   | { kind: "HELD"; at: string }
   | { kind: "FAILED"; error: string; at: string };
 
@@ -42,7 +43,6 @@ export interface ProcurementItem {
 export interface Integrations {
   supabase: boolean;
   gemini: boolean;
-  zoho: boolean;
   email: boolean;
   emailTo: string | null;
 }
@@ -159,7 +159,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const report = React.useMemo(() => validateAndPrepare(filesFor(uploads)), [uploads]);
   const coreUploaded = (["sales", "inventory", "skuMaster"] as FileKind[]).every((k) => uploads[k]);
   const dataLabel = coreUploaded ? "UPLOADED DATA" : Object.keys(uploads).length ? "SAMPLE + UPLOADS" : "SAMPLE FILES";
-  const sourceLabel = coreUploaded ? "uploaded SAP and Zoho exports" : Object.keys(uploads).length ? "uploaded files and the Freshroots sample files" : "the Freshroots sample files";
+  const sourceLabel = coreUploaded ? "uploaded files" : Object.keys(uploads).length ? "uploaded files and the Freshroots sample files" : "the Freshroots sample files";
   const notes = React.useMemo(() => rubricNotes(audit, retiredNotes), [audit, retiredNotes]);
 
   const notify = React.useCallback((message: string) => {
@@ -227,7 +227,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     fetch("/api/status")
       .then((r) => r.json())
       .then(setIntegrations)
-      .catch(() => setIntegrations({ supabase: false, gemini: false, zoho: false, email: false, emailTo: null }));
+      .catch(() => setIntegrations({ supabase: false, gemini: false, email: false, emailTo: null }));
   }, [applyShared]);
 
   // Keep shared state fresh so everyone sees the same decisions.
@@ -289,7 +289,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (pendingPo.includes(sku)) return { kind: "PENDING" };
       const po = audit.find((e) => e.runId === d.runId && e.sku === sku && (e.type === "PO_CREATED" || e.type === "PO_FAILED" || e.type === "PO_HELD") && e.timestamp >= d.timestamp);
       if (!po) return { kind: "PENDING" };
-      if (po.type === "PO_CREATED") return { kind: "CREATED", poNumber: po.reference ?? "", simulated: (po.reference ?? "").startsWith("SIM-"), at: po.timestamp };
+      if (po.type === "PO_CREATED") return { kind: "CREATED", poNumber: poNumberOf(po), at: po.timestamp };
       if (po.type === "PO_HELD") return { kind: "HELD", at: po.timestamp };
       return { kind: "FAILED", error: po.reason, at: po.timestamp };
     },

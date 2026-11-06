@@ -3,6 +3,7 @@
 import { toCsv } from "./csv";
 import { effectiveDecisions } from "./decisions";
 import { ACTION_LABEL, PROCUREMENT_ACTIONS } from "./labels";
+import { poNumberOf } from "./purchaseOrder";
 import type { AnalysisResult, AuditEntry } from "./types";
 
 const ist = (iso: string) =>
@@ -18,7 +19,7 @@ export function procurementCsv(analysis: AnalysisResult, audit: AuditEntry[]): {
       const rec = bySku.get(e.sku!)!;
       const reorder = e.finalAction === "IMMEDIATE_REORDER" || e.finalAction === "REORDER_1_5X";
       const po = audit.find((x) => x.sku === e.sku && x.runId === e.runId && (x.type === "PO_CREATED" || x.type === "PO_HELD" || x.type === "PO_FAILED") && x.timestamp >= e.timestamp);
-      const poText = !reorder ? "Not needed" : po?.type === "PO_CREATED" ? (po.reference ?? "") : po?.type === "PO_HELD" ? "Held by kill switch" : po?.type === "PO_FAILED" ? "Failed" : "Pending";
+      const poText = !reorder ? "Not needed" : po?.type === "PO_CREATED" ? poNumberOf(po) : po?.type === "PO_HELD" ? "Held by kill switch" : po?.type === "PO_FAILED" ? "Failed" : "Pending";
       return [
         analysis.runId,
         rec.sku,
@@ -36,7 +37,7 @@ export function procurementCsv(analysis: AnalysisResult, audit: AuditEntry[]): {
       ] as (string | number)[];
     });
   const csv = toCsv(
-    ["Run", "SKU", "Product", "Category", "Lead distributor", "Action", "Approved quantity", "System quantity", "Decision", "Approved by", "Approved at (IST)", "Reason", "Zoho PO"],
+    ["Run", "SKU", "Product", "Category", "Lead distributor", "Action", "Approved quantity", "System quantity", "Decision", "Approved by", "Approved at (IST)", "Reason", "PO number"],
     rows,
   );
   return { filename: `freshroots-approved-orders-${analysis.runId}.csv`, csv, count: rows.length, skus: rows.map((r) => String(r[1])) };

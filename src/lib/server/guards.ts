@@ -5,6 +5,7 @@ import { REVIEWER } from "@/business/config";
 import { effectiveDecisions, reopenAudit, type DecisionInput } from "@/business/decisions";
 import { auditEvent } from "@/business/events";
 import { killSwitchState } from "@/business/measurement";
+import { poNumberOf } from "@/business/purchaseOrder";
 import type { AnalysisResult, AuditEntry, Recommendation } from "@/business/types";
 
 export type GuardResult<T> = { ok: true; value: T } | { ok: false; status: number; error: string };
@@ -56,7 +57,7 @@ export function buildClientEvents(entries: Partial<AuditEntry>[], runAudit: Audi
         const decision = effectiveDecisions(runAudit).find((d) => d.sku === e.sku);
         if (!rec || !decision) return { ok: false, status: 409, error: "There is no decision to reopen." };
         const po = runAudit.find((x) => x.sku === e.sku && x.type === "PO_CREATED" && x.timestamp >= decision.timestamp);
-        if (po) return { ok: false, status: 409, error: `PO ${po.reference} is already raised in Zoho. Change or cancel it there.` };
+        if (po) return { ok: false, status: 409, error: `Purchase order ${poNumberOf(po)} is already raised for this decision.` };
         out.push(
           reopenAudit(rec, analysis.runId, REVIEWER, now, {
             runId: decision.runId,

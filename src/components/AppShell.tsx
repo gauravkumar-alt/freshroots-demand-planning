@@ -59,9 +59,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="relative min-h-screen lg:grid lg:grid-cols-[232px_1fr]">
+    <div className="relative min-h-screen lg:grid lg:grid-cols-[232px_1fr] print:block">
       <AmbientBackground />
-      <aside className="glass relative z-10 border-b border-white/60 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+      <aside className="glass relative z-10 print:hidden border-b border-white/60 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-4 lg:block">
             <Link href="/" className="flex items-center gap-2.5">
@@ -121,7 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="relative z-10 min-w-0">
-        <header className="glass sticky top-0 z-20 border-b border-white/60">
+        <header className="glass sticky top-0 z-20 border-b border-white/60 print:hidden">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5 lg:px-6">
             <div className="flex min-w-0 items-center gap-2 text-[13px]">
               <ClipboardCheck className="size-4 text-ink-3" />
@@ -131,7 +131,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {analysis && exportDate && (
               <div className="flex items-center gap-2 text-[12.5px] text-ink-2">
                 <span className="size-1.5 rounded-full bg-approved" />
-                Data through {formatDate(analysis.analysisWeek, { day: "numeric", month: "short" })} · SAP/Zoho export {formatDate(exportDate, { day: "numeric", month: "short" })}
+                Data through {formatDate(analysis.analysisWeek, { day: "numeric", month: "short" })} · exported {formatDate(exportDate, { day: "numeric", month: "short" })}
                 <span className="font-semibold text-ink">({age === 0 ? "today" : `${age} day${age === 1 ? "" : "s"} old`})</span>
                 <span className="hidden text-ink-3 xl:inline">· was 3–4 weeks old under the monthly process</span>
               </div>
@@ -144,7 +144,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
-        {ready && <KillSwitchBanner />}
+        {ready && <div className="print:hidden"><KillSwitchBanner /></div>}
 
         {ready && store.storage === "memory" && (
           <div className="border-b border-review/30 bg-review-bg px-4 py-2 text-[12.5px] text-review lg:px-6">

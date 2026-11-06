@@ -30,7 +30,7 @@ export default function RulesPage() {
       <div>
         <h1 className="text-[22px] font-semibold leading-tight">Rules</h1>
         <p className="mt-0.5 max-w-3xl text-[13px] text-ink-3">
-          Raghav’s documented rubric, exactly as the engine applies it. Every recommendation is the result of these rules and simple calculations. Gemini only describes the results; it never changes a number or an action.
+          The rules behind every recommendation.
         </p>
       </div>
 
@@ -73,7 +73,7 @@ export default function RulesPage() {
           <div>
             <p className="font-semibold">Sent to Raghav’s judgement instead of settled by rules</p>
             <p className="mt-1 text-ink-2">
-              New launches, one distributor taking 25+ points more share, high demand with overstock, a stockout an open Zoho PO already covers within {RULES.openPoHorizonDays} days, and SKUs with an active rubric note.
+              New launches, one distributor taking 25+ points more share, high demand with overstock, a stockout an open PO already covers within {RULES.openPoHorizonDays} days, and SKUs with an active rubric note.
             </p>
           </div>
         </div>
@@ -81,8 +81,8 @@ export default function RulesPage() {
 
       <Card>
         <CardHeader
-          title="Rubric feedback from rejections and edits"
-          description={`Rejects + edits → Rubric. Each rejection or edit sends that SKU to Raghav’s judgement for the next ${RULES.rubricNoteRuns} weekly runs, with his reason shown. Numbers and actions are not changed.`}
+          title="Feedback from your rejections and edits"
+          description={`A rejected or edited SKU comes back to you for the next ${RULES.rubricNoteRuns} weeks, with your reason.`}
           action={
             <Link href="/audit#exceptions" className="text-[12.5px] font-medium text-ink-2 hover:underline">
               Patterns in the exception library →
@@ -131,9 +131,9 @@ export default function RulesPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Kill switch" description="The map’s “Breaches threshold?” step" />
+        <CardHeader title="Kill switch" />
         <p className="px-4 py-3 text-[13px] text-ink-2">
-          After every decision, the app checks this week’s rejection rate. Once at least 10 decisions exist and more than 50% are rejections, the kill switch fires: Zoho PO creation stops, approved reorders are held, and an email goes to {store.integrations?.emailTo ?? "the configured address"}. Resuming requires a logged reason.
+          If more than half of a week’s decisions are rejected (once there are 10 or more), purchase orders stop and an email goes to {store.integrations?.emailTo ?? "the configured address"}.
         </p>
       </Card>
     </div>

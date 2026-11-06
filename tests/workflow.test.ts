@@ -13,16 +13,15 @@ const rec = (sku: string) => a.recommendations.find((r) => r.sku === sku)!;
 const others = a.recommendations.filter((r) => !["SKU001", "SKU003"].includes(r.sku));
 
 function deps() {
-  let n = 0;
   return {
-    createPurchaseOrder: vi.fn(async () => ({ ok: true, mode: "simulated" as const, poNumber: `SIM-PO-${++n}` })),
+    createPurchaseOrder: vi.fn(async (po: { reference: string }) => ({ ok: true, poNumber: po.reference })),
     sendKillSwitchEmail: vi.fn(async () => ({ ok: true, mode: "live" as const, to: "planner@example.com", subject: "Kill switch fired", id: "email-1" })),
   } satisfies WorkflowDeps;
 }
 
 const reject = (r: Recommendation) => ({ rec: r, input: { kind: "REJECT" as const, reason: "Test rejection for the kill switch.", category: null } });
 
-describe("Approve → threshold check → PO on Zoho (server workflow)", () => {
+describe("Approve → threshold check → purchase order (server workflow)", () => {
   it("raises a PO for an approved reorder and stores the decision", async () => {
     const repo = new MemoryRepo();
     const d = deps();
@@ -51,7 +50,7 @@ describe("Approve → threshold check → PO on Zoho (server workflow)", () => {
     expect(types.filter((t) => t === "EMAIL_SENT")).toHaveLength(1);
     expect(d.sendKillSwitchEmail).toHaveBeenCalledTimes(1);
 
-    // An approved reorder after the switch fired is held, not sent to Zoho.
+    // An approved reorder after the switch fired is held, not raised.
     const held = await recordDecisions(repo, ctx, [{ rec: rec("SKU001"), input: { kind: "APPROVE" } }], d);
     expect(held.entries.map((e) => e.type)).toEqual(["APPROVED", "PO_HELD"]);
     expect(d.createPurchaseOrder).not.toHaveBeenCalled();

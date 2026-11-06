@@ -33,7 +33,7 @@ export function RecommendationDetail() {
             <DetailBody rec={rec} />
           </div>
           <div className="flex items-center justify-between gap-3 border-t border-line bg-surface px-5 py-2.5 text-[12.5px] text-ink-3">
-            <span>Every number above is calculated from the SAP and Zoho files. No AI model is involved.</span>
+            <span>Calculated from this week’s files.</span>
             <Button size="sm" variant="secondary" onClick={nextPending}>
               Next needing review <ArrowRight />
             </Button>
@@ -154,7 +154,7 @@ function DetailBody({ rec }: { rec: Recommendation }) {
           sub={rec.festival.applied ? `${rec.festival.monthName}: plan ${units(rec.adjustedDemand)}/wk` : `${rec.festival.monthName} is not a festival month`}
         />
         <Metric
-          label="Open Zoho POs"
+          label="Open POs"
           value={rec.openPoQty ? units(rec.openPoQty) : "None"}
           sub={rec.nextDelivery ? `next due ${formatDate(rec.nextDelivery, { day: "numeric", month: "short" })}` : rec.lastOrderDate ? `last order ${formatDate(rec.lastOrderDate, { day: "numeric", month: "short" })}` : "no orders on file"}
         />

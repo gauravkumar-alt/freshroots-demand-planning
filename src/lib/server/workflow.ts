@@ -1,12 +1,12 @@
 import "server-only";
-// The map's server-side path: decision → "Breaches threshold?" → PO on Zoho, or held with an email alert.
+// Decision → threshold check → purchase order, or held with an email alert.
 
 import { REVIEWER } from "@/business/config";
 import { decide, effectiveDecisions, type DecisionInput } from "@/business/decisions";
 import { auditEvent } from "@/business/events";
 import { killSwitchState } from "@/business/measurement";
 import type { AuditEntry, Recommendation } from "@/business/types";
-import { purchaseOrderRequest, type PurchaseOrderRequest, type PurchaseOrderResult } from "@/business/zohoPurchaseOrder";
+import { purchaseOrderRequest, type PurchaseOrderRequest, type PurchaseOrderResult } from "@/business/purchaseOrder";
 import type { EmailResult } from "./email";
 import type { Repo } from "./repo";
 
@@ -40,17 +40,17 @@ const isReorder = (e: AuditEntry) => e.finalAction === "IMMEDIATE_REORDER" || e.
 const sorted = (list: AuditEntry[]) => [...list].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
 async function raisePo(rec: Recommendation, decision: AuditEntry, ctx: RunContext, halted: boolean, deps: WorkflowDeps): Promise<AuditEntry | null> {
-  const req = purchaseOrderRequest(rec, decision, ctx.analysisWeek);
+  const req = purchaseOrderRequest(rec, decision);
   if (!req) return null;
   const base = { sku: rec.sku, product: rec.product, finalAction: decision.finalAction, finalQty: decision.finalQty };
-  if (halted) return auditEvent("PO_HELD", ctx.runId, "System", "Kill switch active: purchase order held, not sent to Zoho.", base);
+  if (halted) return auditEvent("PO_HELD", ctx.runId, "System", "Kill switch active: purchase order held.", base);
   const res = await deps.createPurchaseOrder(req);
   return res.ok
-    ? auditEvent("PO_CREATED", ctx.runId, "System", `${res.mode === "live" ? "Zoho" : "Simulated Zoho"} PO ${res.poNumber} for ${req.quantity.toLocaleString("en-IN")} units.`, { ...base, reference: res.poNumber })
-    : auditEvent("PO_FAILED", ctx.runId, "System", res.error ?? "Zoho rejected the purchase order.", base);
+    ? auditEvent("PO_CREATED", ctx.runId, "System", `Purchase order ${res.poNumber} for ${req.quantity.toLocaleString("en-IN")} units.`, { ...base, reference: res.poNumber })
+    : auditEvent("PO_FAILED", ctx.runId, "System", res.error ?? "The purchase order could not be raised.", base);
 }
 
-/** Records decisions one by one. After each: check the kill switch, then raise (or hold) the Zoho PO. */
+/** Records decisions one by one. After each: check the kill switch, then raise (or hold) the purchase order. */
 export async function recordDecisions(repo: Repo, ctx: RunContext, items: DecisionItem[], deps: WorkflowDeps) {
   const created: AuditEntry[] = [];
   const results: { sku: string; ok: boolean; error?: string }[] = [];
@@ -78,7 +78,7 @@ export async function recordDecisions(repo: Repo, ctx: RunContext, items: Decisi
         "KILL_SWITCH",
         ctx.runId,
         "System",
-        `Kill switch fired: ${ks.check.rejected} of ${ks.check.decided} decisions rejected (${((ks.check.rate ?? 0) * 100).toFixed(1)}% > 50%). Zoho PO creation halted.`,
+        `Kill switch fired: ${ks.check.rejected} of ${ks.check.decided} decisions rejected (${((ks.check.rate ?? 0) * 100).toFixed(1)}% > 50%). Purchase orders on hold.`,
         { reference: String(ks.check.rejected) },
       );
       const standing = effectiveDecisions(runAudit);

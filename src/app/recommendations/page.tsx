@@ -32,7 +32,7 @@ function RecommendationsInner() {
       <div>
         <h1 className="text-[22px] font-semibold leading-tight">Recommendations</h1>
         <p className="mt-0.5 text-[13px] text-ink-3">
-          {store.analysis.weekLabel} · {pending} of {recs.length} need review · Click a row for the full reason. Approving a reorder raises its Zoho PO, if the kill switch is clear.
+          {store.analysis.weekLabel} · {pending} of {recs.length} need review
         </p>
       </div>
       {filters.rule && (

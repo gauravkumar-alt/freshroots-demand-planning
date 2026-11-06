@@ -35,7 +35,7 @@ export function BusinessImpact() {
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         {/* Baseline */}
         <Card>
-          <CardHeader title="The problem being measured" description="Quarterly losses under the monthly, manual process (Freshroots finance baseline)" />
+          <CardHeader title="Quarterly loss baseline" />
           <div className="grid grid-cols-3 divide-x divide-line">
             {[
               { label: "Stockout losses", v: BASELINE.stockout, tone: "text-stockout" },
@@ -52,14 +52,11 @@ export function BusinessImpact() {
               </div>
             ))}
           </div>
-          <p className="border-t border-line px-4 py-2.5 text-[12.5px] text-ink-2">
-            No savings are claimed. Actual losses are compared with this baseline only once finance records them for a completed quarter.
-          </p>
         </Card>
 
         {/* Decision measurement */}
         <Card>
-          <CardHeader title="Decision measurement" description="From the audit log. Approval = approved + edited; override = edited + rejected." />
+          <CardHeader title="Decisions" />
           <div className="grid grid-cols-3 gap-px bg-line">
             {[
               ["Generated", thisRun ? (store.analysis?.recommendations.length ?? 0) : "—", store.runs.reduce((s, r) => s + r.generated, 0)],
@@ -81,7 +78,7 @@ export function BusinessImpact() {
 
       {/* Kill criteria */}
       <Card>
-        <CardHeader title="Kill criteria" description="The kill switch watches rejections every week. Losses are measured each quarter once finance records them." />
+        <CardHeader title="Kill criteria" />
         <div className="grid gap-px bg-line md:grid-cols-2">
           <div className="min-w-0 bg-surface p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -89,7 +86,7 @@ export function BusinessImpact() {
               <KillPill status={loss.status} />
             </div>
             <p className="mt-1 text-[12.5px] text-ink-3">
-              A quarter counts as a decrease when total stockout + overstock loss is below ₹{BASELINE.total.low} lakh, the bottom of the baseline range. {loss.recorded} of {KILL.quartersToMeasure} quarters recorded.
+              {loss.recorded} of {KILL.quartersToMeasure} quarters recorded.
             </p>
             <OutcomeForm />
           </div>
@@ -99,7 +96,7 @@ export function BusinessImpact() {
               <KillPill status={ks?.active ? "TRIGGERED" : (ks?.status ?? "NOT_YET_MEASURABLE")} />
             </div>
             <p className="mt-1 text-[12.5px] text-ink-3">
-              This week: {ks?.rejected ?? 0} rejected of {ks?.decided ?? 0} decisions (checked once 10 or more exist). When it fires, Zoho PO creation stops and you get an email. Pilot to date: {pctText(pilot.rejectionRate)} rejected.
+              This week: {ks?.rejected ?? 0} rejected of {ks?.decided ?? 0} decisions.
             </p>
             <RejectionGauge rate={ks?.rate ?? null} />
             <RunTable />
