@@ -2,7 +2,7 @@
 
 import { Mail } from "lucide-react";
 import * as React from "react";
-import { BusinessImpact, WorkflowCompare } from "@/components/BusinessImpact";
+import { BusinessImpact } from "@/components/BusinessImpact";
 import { DecisionInbox } from "@/components/DecisionInbox";
 import { NoAnalysis } from "@/components/EmptyStates";
 import { AutomationSplit, KPIGrid } from "@/components/KPIGrid";
@@ -31,7 +31,6 @@ export default function OverviewPage() {
         <h2 className="text-[16px] font-semibold">Business impact and kill criteria</h2>
         <BusinessImpact />
       </section>
-      <WorkflowCompare />
     </div>
   );
 }
