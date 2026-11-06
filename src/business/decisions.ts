@@ -185,16 +185,18 @@ export function runIdPlus(runId: string, n: number): string {
   return `${year}-W${String(week).padStart(2, "0")}`;
 }
 
-/** Rejects → Rubric: every standing rejection becomes a rubric note for the following runs. */
+/** Rejects + edits → Rubric: every standing rejection or edit becomes a rubric note for the following runs. */
 export function rubricNotes(audit: AuditEntry[], retiredIds: string[]): RubricNote[] {
   return effectiveDecisions(audit)
-    .filter((e) => e.type === "REJECTED" && e.sku)
+    .filter((e) => (e.type === "REJECTED" || e.type === "EDITED") && e.sku)
     .map((e) => {
       const id = `note-${e.runId}-${e.sku}`;
       return {
         id,
         sku: e.sku!,
         product: e.product ?? "",
+        kind: e.type as "EDITED" | "REJECTED",
+        editedTo: e.type === "EDITED" ? { action: e.finalAction, qty: e.finalQty } : null,
         fromRunId: e.runId,
         untilRunId: runIdPlus(e.runId, RULES.rubricNoteRuns),
         reason: e.reason,

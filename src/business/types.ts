@@ -265,11 +265,15 @@ export interface AuditEntry {
   demo?: boolean;
 }
 
-/** A rejection fed back into the rubric: the SKU goes to Raghav's judgement for the next few runs. */
+/** An edit or rejection fed back into the rubric: the SKU goes to Raghav's judgement for the next few runs. */
 export interface RubricNote {
   id: string;
   sku: string;
   product: string;
+  /** What Raghav did that created the note. */
+  kind: "EDITED" | "REJECTED";
+  /** For edits: what he changed it to. */
+  editedTo: { action: ActionCode | null; qty: number | null } | null;
   fromRunId: string;
   /** Last run (inclusive) the note applies to. */
   untilRunId: string;

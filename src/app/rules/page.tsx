@@ -81,8 +81,8 @@ export default function RulesPage() {
 
       <Card>
         <CardHeader
-          title="Rubric feedback from rejections"
-          description={`Rejects → Rubric. Each rejection sends that SKU to Raghav’s judgement for the next ${RULES.rubricNoteRuns} weekly runs, with his reason shown. Numbers and actions are not changed.`}
+          title="Rubric feedback from rejections and edits"
+          description={`Rejects + edits → Rubric. Each rejection or edit sends that SKU to Raghav’s judgement for the next ${RULES.rubricNoteRuns} weekly runs, with his reason shown. Numbers and actions are not changed.`}
           action={
             <Link href="/audit#exceptions" className="text-[12.5px] font-medium text-ink-2 hover:underline">
               Patterns in the exception library →
@@ -90,7 +90,7 @@ export default function RulesPage() {
           }
         />
         {store.notes.length === 0 ? (
-          <p className="px-4 py-6 text-[13px] text-ink-3">No rejections yet.</p>
+          <p className="px-4 py-6 text-[13px] text-ink-3">No rejections or edits yet.</p>
         ) : (
           <ul className="divide-y divide-line">
             {store.notes.map((n) => {
@@ -108,7 +108,7 @@ export default function RulesPage() {
                     </p>
                     <p className="mt-0.5 text-[13px] text-ink-2">“{n.reason}”</p>
                     <p className="mt-0.5 text-[12px] text-ink-3">
-                      Rejected in {n.fromRunId} · {formatTime(n.createdAt)}
+                      {n.kind === "EDITED" ? `Edited${n.editedTo?.qty != null ? ` to ${n.editedTo.qty.toLocaleString("en-IN")} units` : ""}` : "Rejected"} in {n.fromRunId} · {formatTime(n.createdAt)}
                       {n.category ? ` · ${n.category}` : ""}
                     </p>
                   </div>

@@ -112,3 +112,36 @@ describe("PO on Zoho", () => {
     expect(purchaseOrderRequest(mango, { ...approved, finalAction: "PAUSE_NEXT_ORDER", finalQty: 0 }, a.analysisWeek)).toBeNull();
   });
 });
+
+describe("Edits → Rubric (as on the component map)", () => {
+  const edited: AuditEntry = {
+    ...entry("SKU003", "APPROVED", "2026-W41"),
+    type: "EDITED",
+    id: "2026-W41-SKU003-edit",
+    systemAction: "IMMEDIATE_REORDER",
+    systemQty: 300,
+    finalAction: "IMMEDIATE_REORDER",
+    finalQty: 200,
+    override: true,
+    reason: "Supplier short this week.",
+  };
+
+  it("an edit creates a rubric note that remembers the edited quantity", () => {
+    const [note] = rubricNotes([edited], []);
+    expect(note).toMatchObject({ sku: "SKU003", kind: "EDITED", editedTo: { action: "IMMEDIATE_REORDER", qty: 200 }, fromRunId: "2026-W41", untilRunId: "2026-W43" });
+  });
+
+  it("sends the edited SKU to Raghav's judgement next week, without changing the numbers", () => {
+    const ds = validateAndPrepare(freshrootsRawFiles()).dataset!;
+    const before = runAnalysis(ds, "2026-10-19T07:30:00Z").recommendations.find((r) => r.sku === "SKU003")!;
+    const after = runAnalysis(ds, "2026-10-19T07:30:00Z", rubricNotes([edited], [])).recommendations.find((r) => r.sku === "SKU003")!;
+    expect(before.decisionMode).toBe("RULE_BASED");
+    expect(after.decisionMode).toBe("JUDGEMENT");
+    expect(after.judgementReasons[0]).toBe("Rubric note from your edit (to 200 units) in 2026-W41: “Supplier short this week.”");
+    expect([after.action, after.suggestedQty]).toEqual([before.action, before.suggestedQty]);
+  });
+
+  it("a plain approval creates no note", () => {
+    expect(rubricNotes([entry("SKU001", "APPROVED", "2026-W41")], [])).toEqual([]);
+  });
+});

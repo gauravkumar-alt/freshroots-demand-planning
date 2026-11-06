@@ -274,7 +274,7 @@ export function WorkflowCompare() {
               </li>
             ))}
           </ol>
-          <p className="mt-3 text-[12.5px] text-approved">Data is days old, every recommendation carries its reason, and rejections feed back into the rubric.</p>
+          <p className="mt-3 text-[12.5px] text-approved">Data is days old, every recommendation carries its reason, and rejections and edits feed back into the rubric.</p>
         </div>
       </div>
     </Card>

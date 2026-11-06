@@ -102,7 +102,7 @@ export function DecisionActions({ rec, onDecided }: { rec: Recommendation; onDec
             <PoStatus po={po} />
           </p>
         )}
-        {status === "REJECTED" && <p className="mt-2 text-[12.5px] text-ink-3">Fed back to the rubric: this SKU goes to your judgement for the next 2 weekly runs.</p>}
+        {(status === "REJECTED" || status === "EDITED") && <p className="mt-2 text-[12.5px] text-ink-3">Fed back to the rubric: this SKU goes to your judgement for the next 2 weekly runs.</p>}
       </div>
     );
   }
@@ -174,7 +174,7 @@ export function DecisionActions({ rec, onDecided }: { rec: Recommendation; onDec
           {error && <p className="text-[12.5px] font-medium text-rejected">{error}</p>}
           <div className="flex gap-2">
             <Button variant={mode === "edit" ? "primary" : "reject"} onClick={mode === "edit" ? saveEdit : saveReject} disabled={busy}>
-              {busy ? "Saving…" : mode === "edit" ? "Save edit and raise PO" : "Reject and add to rubric"}
+              {busy ? "Saving…" : mode === "edit" ? "Save edit, raise PO, add to rubric" : "Reject and add to rubric"}
             </Button>
             <Button variant="ghost" onClick={() => (setMode("idle"), setError(null))}>
               Cancel

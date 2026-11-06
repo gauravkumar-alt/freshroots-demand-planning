@@ -140,7 +140,10 @@ export function evaluateSku(
 
   // Rubric feedback from earlier rejections: never changes the numbers, only routes the SKU to Raghav.
   for (const n of notes) {
-    if (n.sku === master.sku) judgement.push(`Rubric note from your rejection in ${n.fromRunId}: “${n.reason}”`);
+    if (n.sku === master.sku) {
+      const what = n.kind === "EDITED" ? `edit${n.editedTo?.qty != null ? ` (to ${units(n.editedTo.qty)} units)` : ""}` : "rejection";
+      judgement.push(`Rubric note from your ${what} in ${n.fromRunId}: “${n.reason}”`);
+    }
   }
 
   const economics = computeEconomics({ master, currentStock: sku.currentStock, weeklyDemand: adjustedDemand, window, openPoQty: po.openQty, asOfDate, orderDate });
