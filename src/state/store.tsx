@@ -4,7 +4,7 @@
 // in Supabase; this store loads it, keeps it fresh, and derives statuses from the audit log.
 // The analysis itself runs in the browser from the current files: it is deterministic and needs no server.
 
-import { poNumberOf } from "@/business/purchaseOrder";
+import { poNumberOf, withRaisedPurchaseOrders } from "@/business/purchaseOrder";
 import * as React from "react";
 import { REVIEWER } from "@/business/config";
 import { parseCsv, toCsv } from "@/business/csv";
@@ -204,7 +204,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         applyShared(s);
         const rep = validateAndPrepare(filesFor(s.uploads));
         if (rep.dataset) {
-          const a = runEngine(rep.dataset, new Date().toISOString(), rubricNotes(s.audit, s.retiredNotes));
+          const a = runEngine(withRaisedPurchaseOrders(rep.dataset, s.audit), new Date().toISOString(), rubricNotes(s.audit, s.retiredNotes));
           setAnalysis(a);
           setAnalysisFiles(uploadsKey(s.uploads));
           if (!s.audit.some((e) => e.runId === a.runId && e.type === "ANALYSIS_RUN")) {
@@ -326,7 +326,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const runAnalysis = React.useCallback(() => {
     if (!report.canRun || !report.dataset) return { ok: false, message: "Fix the blocking data errors on the Data page before running the analysis." };
-    const a = runEngine(report.dataset, new Date().toISOString(), notes);
+    const a = runEngine(withRaisedPurchaseOrders(report.dataset, audit), new Date().toISOString(), notes);
     const filesKey = uploadsKey(uploads);
     // Log a run once per week, and again only when the files behind it changed.
     const alreadyLogged = audit.some((e) => e.runId === a.runId && e.type === "ANALYSIS_RUN") && analysisFiles === filesKey;

@@ -1,7 +1,11 @@
 // Purchase orders, raised by the app itself when Raghav approves a reorder.
 
 import { addDays } from "./dates";
-import type { ActionCode, AuditEntry, Recommendation } from "./types";
+import { runIdFor } from "./recommendationEngine";
+import type { ActionCode, AuditEntry, PreparedDataset, PurchaseOrderRow, Recommendation } from "./types";
+
+/** Lead time assumed for an app-raised PO when the SKU master has none. */
+export const DEFAULT_LEAD_DAYS = 7;
 
 /** One PO per SKU per weekly run, so its number is fixed: FR-PO-2026-W42-013. Retries can never make a second one. */
 export function poNumber(runId: string, sku: string): string {
@@ -88,4 +92,28 @@ export function purchaseOrderDocument(po: AuditEntry, decision: AuditEntry | nul
     systemQty: decision?.systemQty ?? null,
     note: decision?.type === "EDITED" ? decision.reason : "",
   };
+}
+
+/**
+ * POs the app raised in earlier weeks count as stock on the way, exactly like rows in an uploaded open-PO file.
+ * Without this, next week's analysis would recommend ordering the same units again.
+ * A PO is open until its expected delivery (order date + lead time) has passed the stock snapshot date;
+ * after that its units are assumed to be in the uploaded inventory.
+ */
+export function withRaisedPurchaseOrders(dataset: PreparedDataset, audit: AuditEntry[]): PreparedDataset {
+  const runId = runIdFor(dataset.analysisWeek);
+  const snapshot = dataset.asOfDate ?? dataset.analysisWeek;
+  const bySku = new Map<string, PurchaseOrderRow[]>();
+  for (const e of audit) {
+    if (e.type !== "PO_CREATED" || !e.sku || !e.finalQty || e.runId >= runId) continue;
+    const sku = dataset.skus.find((s) => s.master.sku === e.sku);
+    if (!sku) continue;
+    const orderDate = e.timestamp.slice(0, 10);
+    const expectedDelivery = addDays(orderDate, sku.master.leadTimeDays ?? DEFAULT_LEAD_DAYS);
+    if (expectedDelivery <= snapshot) continue;
+    const row: PurchaseOrderRow = { sku: e.sku, distributor: "Freshroots PO", previousOrder: 0, orderQty: e.finalQty, orderDate, expectedDelivery, poNumber: poNumberOf(e) };
+    bySku.set(e.sku, [...(bySku.get(e.sku) ?? []), row]);
+  }
+  if (!bySku.size) return dataset;
+  return { ...dataset, skus: dataset.skus.map((s) => (bySku.has(s.master.sku) ? { ...s, purchaseOrders: [...s.purchaseOrders, ...bySku.get(s.master.sku)!] } : s)) };
 }

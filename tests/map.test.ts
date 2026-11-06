@@ -5,7 +5,7 @@ import { killSwitchCheck } from "@/business/measurement";
 import { activeRubricNotes, runAnalysis } from "@/business/recommendationEngine";
 import type { AuditEntry } from "@/business/types";
 import { validateAndPrepare } from "@/business/validationEngine";
-import { poNumberOf, purchaseOrderDocument, purchaseOrderRequest } from "@/business/purchaseOrder";
+import { poNumberOf, purchaseOrderDocument, purchaseOrderRequest, withRaisedPurchaseOrders } from "@/business/purchaseOrder";
 import { freshrootsRawFiles } from "@/data/freshrootsFiles";
 
 const entry = (sku: string, type: "APPROVED" | "REJECTED", runId = "2026-W42", i = 0): AuditEntry => ({
@@ -120,6 +120,38 @@ describe("Purchase orders raised in the app", () => {
     expect(doc).toMatchObject({ number: "FR-PO-2026-W42-001", quantity: 600, approvedBy: approved.user });
     expect(doc.total).toBe(600 * mango.economics.unitCost!);
     expect(doc.expectedDelivery).toBe(new Date(Date.parse("2026-11-04") + mango.economics.leadTimeDays! * 864e5).toISOString().slice(0, 10));
+  });
+});
+
+describe("POs the app raised count as stock on the way next week", () => {
+  const ds = validateAndPrepare(freshrootsRawFiles()).dataset!;
+  const po = (runId: string, sku: string, day: string, qty: number): AuditEntry => ({
+    ...entry(sku, "APPROVED", runId),
+    id: `${runId}-${sku}-po`,
+    type: "PO_CREATED",
+    user: "System",
+    timestamp: `${day}T05:00:00Z`,
+    finalAction: "IMMEDIATE_REORDER",
+    finalQty: qty,
+    reference: `FR-PO-${runId}-${sku.slice(3)}`,
+  });
+
+  it("adds last week's undelivered PO as an open order, and skips delivered or same-week ones", () => {
+    const audit = [po("2026-W41", "SKU001", "2026-10-16", 750), po("2026-W40", "SKU003", "2026-10-01", 300), po("2026-W42", "SKU011", "2026-10-19", 400)];
+    const out = withRaisedPurchaseOrders(ds, audit);
+    const orders = (sku: string) => out.skus.find((s) => s.master.sku === sku)!.purchaseOrders;
+    expect(orders("SKU001")).toMatchObject([{ orderQty: 750, poNumber: "FR-PO-2026-W41-001" }]);
+    expect(orders("SKU003")).toEqual([]); // delivered before the 19 Oct stock count
+    expect(orders("SKU011")).toEqual([]); // this week's own PO
+  });
+
+  it("sends the SKU to Raghav with an 'already ordered' note and lowers the shortfall", () => {
+    const before = runAnalysis(ds, "2026-10-19T07:30:00Z").recommendations.find((r) => r.sku === "SKU001")!;
+    const after = runAnalysis(withRaisedPurchaseOrders(ds, [po("2026-W41", "SKU001", "2026-10-16", 750)]), "2026-10-19T07:30:00Z").recommendations.find((r) => r.sku === "SKU001")!;
+    expect(after.openPoQty).toBe(750);
+    expect(after.decisionMode).toBe("JUDGEMENT");
+    expect(after.judgementReasons.join(" ")).toMatch(/Already ordered: FR-PO-2026-W41-001, 750 units due/);
+    expect(after.economics.shortfallUnits).toBeLessThan(before.economics.shortfallUnits);
   });
 });
 

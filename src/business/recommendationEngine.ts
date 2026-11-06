@@ -128,7 +128,12 @@ export function evaluateSku(
         `Unusual distributor behaviour: ${shifted.distributor} took ${Math.round(shifted.share4 * 100)}% of volume in the last 4 weeks vs ${Math.round(shifted.share12 * 100)}% over 12 weeks.`,
       );
     }
-    if (stockoutFlag && po.nextDelivery && daysBetween(analysisWeek, po.nextDelivery) <= RULES.openPoHorizonDays) {
+    // POs the app raised in an earlier week and still on the way: always Raghav's call, so the same order is not placed twice.
+    const raised = sku.purchaseOrders.filter((o) => o.poNumber && o.expectedDelivery && daysBetween(analysisWeek, o.expectedDelivery) > 0);
+    for (const o of raised) {
+      judgement.push(`Already ordered: ${o.poNumber}, ${units(o.orderQty)} units due ${formatDate(o.expectedDelivery!, { day: "numeric", month: "short" })}. Check before ordering again.`);
+    }
+    if (!raised.length && stockoutFlag && po.nextDelivery && daysBetween(analysisWeek, po.nextDelivery) <= RULES.openPoHorizonDays) {
       const coverWithPo = ((sku.currentStock ?? 0) + po.openQty) / adjustedDemand;
       if (coverWithPo >= window.min) {
         judgement.push(

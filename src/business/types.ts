@@ -42,6 +42,8 @@ export interface PurchaseOrderRow {
   orderQty: number;
   orderDate: string;
   expectedDelivery: string | null;
+  /** Set when the app raised this PO itself in an earlier week. */
+  poNumber?: string;
 }
 
 export interface RawDatasets {
