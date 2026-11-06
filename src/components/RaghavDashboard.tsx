@@ -1,6 +1,6 @@
 "use client";
 
-// Raghav's dashboard: greeting, four headline numbers and four bar charts. Charts lay out to their real
+// Raghav's dashboard: greeting, four headline numbers and one bar chart of the SKUs that need a decision. Charts lay out to their real
 // pixel width (so labels stay readable on a phone), show a tooltip on hover or keyboard focus, and open
 // the SKU's detail panel on click. Bars grow in with GSAP when motion is allowed.
 
@@ -9,7 +9,7 @@ import * as React from "react";
 import { daysBetween, formatDate } from "@/business/dates";
 import { pct, rupees, units, weeks } from "@/business/format";
 import { ACTION_LABEL } from "@/business/labels";
-import { backtest, forecastFor } from "@/business/outcomes";
+import { backtest } from "@/business/outcomes";
 import type { Recommendation } from "@/business/types";
 import { AnimatedNumber, gsap, useGSAP, withMotion } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -47,12 +47,6 @@ function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] 
 function hbarPath(x0: number, y: number, w: number, h: number, dir: 1 | -1 = 1) {
   const len = Math.max(w, 1), r = Math.min(4, len, h / 2), s = dir;
   return `M${x0} ${y}h${s * (len - r)}a${r} ${r} 0 0 ${s > 0 ? 1 : 0} ${s * r} ${r}v${h - 2 * r}a${r} ${r} 0 0 ${s > 0 ? 1 : 0} ${-s * r} ${r}h${-s * (len - r)}z`;
-}
-
-/** Vertical column with a 4px rounded cap, square at the baseline. */
-function vbarPath(x: number, y0: number, w: number, h: number) {
-  const len = Math.max(h, 1), r = Math.min(4, len, w / 2);
-  return `M${x} ${y0}v${-(len - r)}a${r} ${r} 0 0 1 ${r} ${-r}h${w - 2 * r}a${r} ${r} 0 0 1 ${r} ${r}v${len - r}z`;
 }
 
 interface Tip {
@@ -127,7 +121,7 @@ function Swatch({ color, label, line, band }: { color: string; label: string; li
 
 function ChartCard({ title, caption, legend, children, className }: { title: string; caption: string; legend?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={cn("rounded-md border border-line bg-surface px-4 pb-3 pt-4 sm:px-5", className)}>
+    <section className={cn("min-w-0 rounded-md border border-line bg-surface px-4 pb-3 pt-4 sm:px-5", className)}>
       <h2 className="text-[15px] font-semibold">{title}</h2>
       <p className="mt-0.5 text-[12.5px] text-ink-3">{caption}</p>
       {legend && <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">{legend}</div>}
@@ -156,36 +150,57 @@ function useGrow(ref: React.RefObject<SVGSVGElement | null>, key: unknown, axis:
   );
 }
 
-// ---------- 1. Stock cover against target ----------
+// ---------- the one chart: SKUs that need a decision ----------
 
 function urgencyOrder(today: string) {
   return (a: Recommendation, b: Recommendation) => {
     const outA = a.economics.runOutDate !== null && a.economics.runOutDate < today ? 1 : 0;
     const outB = b.economics.runOutDate !== null && b.economics.runOutDate < today ? 1 : 0;
-    return outB - outA || (b.economics.stockoutGapDays ?? 0) - (a.economics.stockoutGapDays ?? 0) || (a.weeksOfStock ?? 0) / a.window.min - (b.weeksOfStock ?? 0) / b.window.min;
+    return (
+      outB - outA ||
+      (b.economics.stockoutGapDays ?? 0) - (a.economics.stockoutGapDays ?? 0) ||
+      (a.risk === "STOCKOUT" ? 0 : 1) - (b.risk === "STOCKOUT" ? 0 : 1) ||
+      (b.economics.valueAtRisk ?? 0) - (a.economics.valueAtRisk ?? 0)
+    );
   };
 }
 
-function StockCoverChart({ recs, onOpen }: { recs: Recommendation[]; onOpen: (sku: string) => void }) {
+/** Next to the bar end, unless that would sit on the target band; then just past the band. */
+function valueLabelX(barEnd: number, bandStart: number, bandEnd: number, labelWidth = 30) {
+  const at = barEnd + 6;
+  const hitsBand = at < bandEnd && at + labelWidth > bandStart && barEnd < bandStart;
+  return hitsBand ? bandEnd + 6 : at;
+}
+
+/** One row per SKU waiting for Raghav: weeks of stock against its target band, with what's at stake written beside it. */
+function DecisionChart({ recs, onOpen }: { recs: Recommendation[]; onOpen: (sku: string) => void }) {
   const [box, width] = useWidth<HTMLDivElement>();
   const svg = React.useRef<SVGSVGElement>(null);
   const [tip, setTip] = React.useState<Tip | null>(null);
   const today = todayIst();
-  const rows = recs.filter((r) => r.weeksOfStock !== null).sort(urgencyOrder(today));
-  useGrow(svg, rows.map((r) => r.sku + r.weeksOfStock).join(), "x");
+  const rows = [...recs].sort(urgencyOrder(today));
+  useGrow(svg, rows.map((r) => r.sku).join(), "x");
 
-  const narrow = width < 520;
-  const L = narrow ? 118 : 190, R = Math.max(L + 80, width - (narrow ? 56 : 150)), rowH = narrow ? 30 : 30, top = 6;
-  const maxWeeks = Math.max(16, Math.ceil(Math.max(...rows.map((r) => r.window.max), ...rows.map((r) => Math.min(r.weeksOfStock ?? 0, 30))) / 4) * 4);
+  const narrow = width < 560;
+  const rowH = narrow ? 52 : 46, top = 4;
+  const L = narrow ? 112 : 200;
+  const R = narrow ? width - 44 : Math.max(L + 120, width - 300);
+  const maxWeeks = Math.max(16, Math.ceil(Math.max(0, ...rows.map((r) => r.window.max), ...rows.map((r) => Math.min(r.weeksOfStock ?? 0, 30))) / 4) * 4);
   const x = (v: number) => L + (Math.min(v, maxWeeks) / maxWeeks) * (R - L);
   const height = top + rows.length * rowH + 24;
   const tickStep = narrow ? 8 : 4;
   const ticks = Array.from({ length: Math.floor(maxWeeks / tickStep) + 1 }, (_, i) => i * tickStep);
 
   return (
-    <div ref={box} className="relative">
-      {width > 0 && (
-        <svg ref={svg} width={width} height={height} role="group" aria-label="Weeks of stock per SKU against its target window">
+    <div ref={box} className="relative w-full min-w-0 overflow-hidden">
+      {rows.length === 0 && (
+        <p className="flex items-center gap-2 py-6 text-[14px] font-medium text-approved">
+          <span className="grid size-6 place-items-center rounded-full bg-approved-bg">✓</span> Nothing needs your decision this week.
+        </p>
+      )}
+      {width > 0 && rows.length > 0 && (
+        // width="100%" so the chart never sets the page width; the viewBox matches the measured width, so nothing is scaled.
+        <svg ref={svg} width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMinYMin meet" className="block" role="group" aria-label="SKUs that need a decision: weeks of stock against target">
           {ticks.map((t) => (
             <g key={t}>
               <line x1={x(t)} x2={x(t)} y1={top} y2={top + rows.length * rowH} stroke="var(--viz-grid)" />
@@ -195,228 +210,65 @@ function StockCoverChart({ recs, onOpen }: { recs: Recommendation[]; onOpen: (sk
             </g>
           ))}
           {rows.map((r, i) => {
-            const y = top + i * rowH, yc = y + rowH / 2, wos = r.weeksOfStock!;
-            const state = wos < r.window.min ? "below" : wos > r.window.max ? "above" : "within";
-            const color = state === "below" ? "var(--viz-critical)" : state === "above" ? "var(--viz-warning)" : "var(--viz-good)";
+            const y = top + i * rowH, yc = y + rowH / 2, wos = r.weeksOfStock;
             const e = r.economics;
+            const color = wos === null ? "var(--viz-axis)" : wos < r.window.min ? "var(--viz-critical)" : wos > r.window.max ? "var(--viz-warning)" : "var(--viz-good)";
             const isOut = e.runOutDate !== null && e.runOutDate < today;
             const late = (e.stockoutGapDays ?? 0) > 0;
-            const note = isOut ? `out since ${shortDay(e.runOutDate!)}` : late && e.runOutDate ? `runs out ${shortDay(e.runOutDate)}` : "";
-            const labelX = Math.max(x(wos), x(r.window.max)) + 8;
+            const status = wos === null ? "Needs manual review" : isOut ? `Out of stock since ${shortDay(e.runOutDate!)}` : late && e.runOutDate ? `Runs out ${shortDay(e.runOutDate)}, before an order can arrive` : e.runOutDate && wos < r.window.min ? `Runs out ${shortDay(e.runOutDate)}` : `${weeks(wos)} weeks of stock`;
+            const action = `${ACTION_LABEL[r.action]}${r.suggestedQty ? ` ${units(r.suggestedQty)}` : ""}`;
+            const stake = e.valueAtRisk !== null ? `${rupees(e.valueAtRisk)} ${e.valueKind === "MARGIN_AT_RISK" ? "at risk" : "tied up"}` : "";
             const tipLines = [
-              `${weeks(wos)} weeks of stock · target ${r.window.min}–${r.window.max}`,
-              ...(e.runOutDate ? [isOut ? `Ran out ${shortDay(e.runOutDate)}` : `Runs out ${shortDay(e.runOutDate)}`] : []),
-              ...(e.arrivalIfOrderedToday && r.action !== "NO_ACTION" && r.action !== "PAUSE_NEXT_ORDER" ? [`Order today arrives ${shortDay(e.arrivalIfOrderedToday)}`] : []),
-              `${ACTION_LABEL[r.action]}${r.suggestedQty ? ` · ${units(r.suggestedQty)} units` : ""}`,
+              ...(wos !== null ? [`${weeks(wos)} weeks of stock · target ${r.window.min}–${r.window.max}`] : []),
+              status,
+              ...(e.arrivalIfOrderedToday && (r.action === "IMMEDIATE_REORDER" || r.action === "REORDER_1_5X") ? [`Order today arrives ${shortDay(e.arrivalIfOrderedToday)}`] : []),
+              ...(r.demandChange !== null ? [`Demand ${pct(r.demandChange)} vs 12-week average${r.demandChange > 0.2 ? " (high-demand rule)" : ""}`] : []),
+              ...(stake ? [stake] : []),
+              `Recommended: ${action}`,
+              "Click to decide",
             ];
+            const urgent = isOut || late;
             return (
               <g key={r.sku}>
-                <rect x={x(r.window.min)} y={y + 5} width={x(r.window.max) - x(r.window.min)} height={rowH - 10} rx={4} fill="var(--viz-band)" stroke="var(--viz-band-edge)" strokeDasharray="3 3" />
-                <path className="viz-bar" d={hbarPath(L, yc - 7, x(wos) - L, 14)} fill={color} />
-                <text x={L - 10} y={narrow ? yc + 4 : yc - 1} textAnchor="end" fontSize={narrow ? 12 : 13} fontWeight={600} fill="var(--ink)">
+                {urgent && <rect x={0} y={y + 2} width={width} height={rowH - 4} rx={6} fill="var(--stockout-bg)" opacity={0.55} />}
+                <rect x={x(r.window.min)} y={yc - 9} width={x(r.window.max) - x(r.window.min)} height={18} rx={4} fill="var(--viz-band)" stroke="var(--viz-band-edge)" strokeDasharray="3 3" />
+                {wos !== null && <path className="viz-bar" d={hbarPath(L, yc - 7, x(wos) - L, 14)} fill={color} />}
+                <text x={L - 12} y={yc - 3} textAnchor="end" fontSize={narrow ? 12.5 : 13.5} fontWeight={600} fill="var(--ink)">
                   {narrow ? compact(r.product) : shortName(r.product)}
                 </text>
-                {!narrow && (
-                  <text x={L - 10} y={yc + 12} textAnchor="end" fontSize={10.5} fill="var(--ink-3)" fontFamily="var(--font-mono)">
-                    {r.sku}
-                    {r.perishability === "High" ? " · perishable" : ""}
+                <text x={L - 12} y={yc + 12} textAnchor="end" fontSize={narrow ? 10.5 : 11.5} fill="var(--ink-3)">
+                  {narrow ? (stake || action) : `${r.sku}${r.perishability === "High" ? " · perishable" : ""}`}
+                </text>
+                {wos !== null && (
+                  <text x={valueLabelX(x(wos), x(r.window.min), x(r.window.max))} y={yc + 4} fontSize={11.5} fontWeight={600} fill="var(--ink-2)" fontFamily="var(--font-mono)">
+                    {weeks(wos)}
                   </text>
                 )}
-                <text x={labelX} y={yc + 4} fontSize={12} fontWeight={late || isOut ? 600 : 400} fill={late || isOut ? "var(--ink)" : "var(--ink-2)"}>
-                  {late || isOut ? "⚠ " : ""}
-                  {weeks(wos)}
-                  {narrow ? "" : " wks"}
-                  {note && !narrow ? ` · ${note}` : ""}
-                </text>
+                {!narrow && (
+                  <>
+                    <text x={R + 24} y={yc - 3} fontSize={12.5} fontWeight={urgent ? 600 : 500} fill="var(--ink)">
+                      {urgent ? "⚠ " : ""}
+                      {status}
+                    </text>
+                    <text x={R + 24} y={yc + 13} fontSize={12} fill="var(--ink-2)">
+                      {action}
+                      {stake ? ` · ${stake}` : ""}
+                    </text>
+                  </>
+                )}
                 <HitRow
                   x={0}
                   y={y}
                   w={width}
                   h={rowH}
                   label={`${shortName(r.product)}: ${tipLines.join(". ")}`}
-                  tip={{ x: Math.min(Math.max(x(wos), 140), width - 140), y: y + 4, title: shortName(r.product), lines: tipLines }}
+                  tip={{ x: Math.min(Math.max(wos !== null ? x(wos) : L, 140), width - 140), y: y + 6, title: shortName(r.product), lines: tipLines }}
                   onTip={setTip}
                   onOpen={() => onOpen(r.sku)}
                 />
               </g>
             );
           })}
-        </svg>
-      )}
-      <Tooltip tip={tip} />
-    </div>
-  );
-}
-
-// ---------- 2. ₹ at stake ----------
-
-function MoneyChart({ recs, onOpen }: { recs: Recommendation[]; onOpen: (sku: string) => void }) {
-  const [box, width] = useWidth<HTMLDivElement>();
-  const svg = React.useRef<SVGSVGElement>(null);
-  const [tip, setTip] = React.useState<Tip | null>(null);
-  const rows = recs.filter((r) => r.economics.valueAtRisk).sort((a, b) => b.economics.valueAtRisk! - a.economics.valueAtRisk!).slice(0, 8);
-  useGrow(svg, rows.map((r) => r.sku + r.economics.valueAtRisk).join(), "x");
-  const L = Math.min(150, width * 0.36), R = width - 78, rowH = 34;
-  const max = Math.max(1, ...rows.map((r) => r.economics.valueAtRisk!));
-  const x = (v: number) => L + (v / max) * (R - L);
-  const height = rows.length * rowH + 8;
-  return (
-    <div ref={box} className="relative">
-      {!rows.length && <p className="py-6 text-[13px] text-ink-3">Nothing at stake, or add cost and price to the SKU master to see ₹ values.</p>}
-      {width > 0 && rows.length > 0 && (
-        <svg ref={svg} width={width} height={height} role="group" aria-label="Rupees at stake per SKU">
-          <line x1={L} x2={L} y1={2} y2={height - 4} stroke="var(--viz-axis)" />
-          {rows.map((r, i) => {
-            const e = r.economics, yc = 4 + i * rowH + rowH / 2, margin = e.valueKind === "MARGIN_AT_RISK";
-            const lines = margin
-              ? [`${rupees(e.valueAtRisk)} margin at risk`, `${units(e.shortfallUnits)} units short of ${r.window.min} weeks`, `${rupees(e.marginPerUnit)} margin per unit`]
-              : [`${rupees(e.valueAtRisk)} cash tied up`, `${units(e.excessUnits)} units above ${r.window.max} weeks`, `${rupees(e.unitCost)} cost per unit`];
-            return (
-              <g key={r.sku}>
-                <path className="viz-bar" d={hbarPath(L, yc - 8, x(e.valueAtRisk!) - L, 16)} fill={margin ? "var(--viz-critical)" : "var(--viz-warning)"} />
-                <text x={L - 10} y={yc + 4} textAnchor="end" fontSize={12.5} fontWeight={500} fill="var(--ink)">
-                  {width < 420 ? compact(r.product) : brandless(r.product)}
-                </text>
-                <text x={x(e.valueAtRisk!) + 8} y={yc + 4} fontSize={12.5} fontWeight={600} fill="var(--ink)" fontFamily="var(--font-mono)">
-                  {rupees(e.valueAtRisk)}
-                </text>
-                <HitRow x={0} y={yc - rowH / 2} w={width} h={rowH} label={`${shortName(r.product)}: ${lines.join(", ")}`} tip={{ x: Math.min(x(e.valueAtRisk!), width - 130), y: yc - 12, title: shortName(r.product), lines }} onTip={setTip} onOpen={() => onOpen(r.sku)} />
-              </g>
-            );
-          })}
-        </svg>
-      )}
-      <Tooltip tip={tip} />
-    </div>
-  );
-}
-
-// ---------- 3. Demand change (diverging) ----------
-
-function DemandChart({ recs, onOpen }: { recs: Recommendation[]; onOpen: (sku: string) => void }) {
-  const [box, width] = useWidth<HTMLDivElement>();
-  const svg = React.useRef<SVGSVGElement>(null);
-  const [tip, setTip] = React.useState<Tip | null>(null);
-  const sorted = recs.filter((r) => r.demandChange !== null).sort((a, b) => b.demandChange! - a.demandChange!);
-  const rows = sorted.length > 8 ? [...sorted.slice(0, 5), ...sorted.slice(-3)] : sorted;
-  useGrow(svg, rows.map((r) => r.sku + r.demandChange).join(), "x");
-
-  const L = Math.min(150, width * 0.36), R = width - 64, rowH = 30;
-  const lo = Math.min(-0.1, ...rows.map((r) => r.demandChange!)), hi = Math.max(0.25, ...rows.map((r) => r.demandChange!));
-  const x = (v: number) => L + ((v - lo) / (hi - lo)) * (R - L);
-  const plotH = rows.length * rowH + 6, height = plotH + 22;
-  return (
-    <div ref={box} className="relative">
-      {width > 0 && (
-        <svg ref={svg} width={width} height={height} role="group" aria-label="Demand change, last 4 weeks against the 12-week average">
-          <line x1={x(0.2)} x2={x(0.2)} y1={2} y2={plotH} stroke="var(--viz-axis)" strokeDasharray="4 3" />
-          <text x={x(0.2)} y={height - 6} textAnchor="middle" fontSize={10.5} fill="var(--viz-axis)">
-            +20% rule
-          </text>
-          <line x1={x(0)} x2={x(0)} y1={2} y2={plotH} stroke="var(--viz-axis)" />
-          <text x={x(0)} y={height - 6} textAnchor="middle" fontSize={10.5} fill="var(--viz-axis)">
-            0
-          </text>
-          {rows.map((r, i) => {
-            const v = r.demandChange!, yc = 4 + i * rowH + rowH / 2, up = v >= 0;
-            const lines = [`${pct(v)} vs the 12-week average`, `4-week avg ${units(r.avg4)} · 12-week avg ${units(r.avg12)} units/week`, v > 0.2 ? "High-demand rule fired" : "Below the +20% rule"];
-            return (
-              <g key={r.sku}>
-                <path className="viz-bar" d={up ? hbarPath(x(0), yc - 7, x(v) - x(0), 14, 1) : hbarPath(x(0), yc - 7, x(0) - x(v), 14, -1)} fill={up ? "var(--viz-up)" : "var(--viz-down)"} />
-                <text x={L - 10} y={yc + 4} textAnchor="end" fontSize={12.5} fontWeight={500} fill="var(--ink)">
-                  {width < 420 ? compact(r.product) : brandless(r.product)}
-                </text>
-                <text x={(up ? x(v) : x(0)) + 6} y={yc + 4} fontSize={12} fontWeight={v > 0.2 ? 600 : 400} fill="var(--ink)" fontFamily="var(--font-mono)">
-                  {pct(v)}
-                </text>
-                <HitRow x={0} y={yc - rowH / 2} w={width} h={rowH} label={`${shortName(r.product)}: ${lines.join(", ")}`} tip={{ x: Math.min(Math.max(x(v), 130), width - 130), y: yc - 10, title: shortName(r.product), lines }} onTip={setTip} onOpen={() => onOpen(r.sku)} />
-              </g>
-            );
-          })}
-        </svg>
-      )}
-      <Tooltip tip={tip} />
-    </div>
-  );
-}
-
-// ---------- 4. Weekly units vs forecast ----------
-
-function WeeklyChart() {
-  const store = useStore();
-  const ds = store.report.dataset;
-  const [box, width] = useWidth<HTMLDivElement>();
-  const svg = React.useRef<SVGSVGElement>(null);
-  const [tip, setTip] = React.useState<Tip | null>(null);
-  const data = React.useMemo(() => {
-    if (!ds) return [];
-    return ds.weeks.map((week, t) => ({
-      week,
-      actual: ds.skus.reduce((s, k) => s + (k.weekly[t] ?? 0), 0),
-      forecast: t >= 4 ? Math.round(ds.skus.reduce((s, k) => s + (forecastFor(k.weekly, t, week, ds.festivalCalendar) ?? 0), 0)) : null,
-      festival: ds.festivalCalendar ? !!ds.festivalCalendar[week.slice(0, 7)] : ["10", "11", "03"].includes(week.slice(5, 7)),
-    }));
-  }, [ds]);
-  const shown = width < 560 ? data.slice(-8) : data;
-  useGrow(svg, shown.map((d) => d.week + d.actual).join(), "y");
-
-  const L = 48, R = width - 8, T = 40, B = 230;
-  const top = Math.max(1, ...shown.map((d) => Math.max(d.actual, d.forecast ?? 0)));
-  const step = top > 3000 ? 1000 : top > 1200 ? 600 : 200;
-  const max = Math.ceil(top / step) * step;
-  const y = (v: number) => B - (v / max) * (B - T);
-  const band = (R - L) / shown.length, cw = Math.min(24, band * 0.55);
-  const fi = shown.findIndex((d) => d.festival);
-  const lastFest = fi >= 0 ? shown.length - 1 - [...shown].reverse().findIndex((d) => d.festival) : -1;
-  const labelled = new Set(shown.slice(-3).map((d) => d.week));
-  return (
-    <div ref={box} className="relative">
-      {width > 0 && shown.length > 0 && (
-        <svg ref={svg} width={width} height={B + 26} role="group" aria-label="Weekly units sold against the engine forecast">
-          {fi >= 0 && (
-            <g>
-              <rect x={L + fi * band} y={T - 34} width={(lastFest - fi + 1) * band} height={B - T + 34} rx={6} fill="var(--viz-festival)" />
-              <text x={L + fi * band + 8} y={T - 18} fontSize={11.5} fontWeight={600} fill="#7a5200">
-                Festival uplift +25%
-              </text>
-            </g>
-          )}
-          {Array.from({ length: max / step + 1 }, (_, i) => i * step).map((t) => (
-            <g key={t}>
-              <line x1={L} x2={R} y1={y(t)} y2={y(t)} stroke="var(--viz-grid)" />
-              <text x={L - 8} y={y(t) + 4} textAnchor="end" fontSize={11} fill="var(--viz-axis)">
-                {t.toLocaleString("en-IN")}
-              </text>
-            </g>
-          ))}
-          {shown.map((d, i) => {
-            const cx = L + i * band + band / 2;
-            const diff = d.forecast ? (d.forecast - d.actual) / d.actual : null;
-            const lines = [`Sold ${units(d.actual)} units`, ...(d.forecast ? [`Forecast ${units(d.forecast)} (${pct(diff)} vs actual)`] : ["No forecast (needs 4 weeks of history)"]), ...(d.festival ? ["Festival uplift week"] : [])];
-            return (
-              <g key={d.week}>
-                <path className="viz-bar" d={vbarPath(cx - cw / 2, B, cw, B - y(d.actual))} fill="var(--viz-actual)" />
-                {d.forecast !== null && <line x1={cx - cw * 0.75} x2={cx + cw * 0.75} y1={y(d.forecast)} y2={y(d.forecast)} stroke="var(--viz-forecast)" strokeWidth={3} strokeLinecap="round" />}
-                {labelled.has(d.week) && (
-                  <>
-                    {d.forecast !== null && (
-                      <text x={cx} y={y(d.forecast) - 8} textAnchor="middle" fontSize={11} fontWeight={600} fill="var(--ink)" fontFamily="var(--font-mono)">
-                        {units(d.forecast)}
-                      </text>
-                    )}
-                    <text x={cx} y={y(d.actual) - 7} textAnchor="middle" fontSize={11} fontWeight={600} fill="var(--ink-2)" fontFamily="var(--font-mono)">
-                      {units(d.actual)}
-                    </text>
-                  </>
-                )}
-                <text x={cx} y={B + 17} textAnchor="middle" fontSize={11} fill="var(--viz-axis)">
-                  {shortDay(d.week)}
-                </text>
-                <HitRow x={cx - band / 2} y={T - 34} w={band} h={B - T + 50} label={`Week ending ${shortDay(d.week)}: ${lines.join(", ")}`} tip={{ x: Math.min(Math.max(cx, 120), width - 120), y: Math.min(y(d.actual), d.forecast ? y(d.forecast) : B) - 4, title: `Week ending ${shortDay(d.week)}`, lines }} onTip={setTip} />
-              </g>
-            );
-          })}
-          <line x1={L} x2={R} y1={B} y2={B} stroke="var(--viz-axis)" />
         </svg>
       )}
       <Tooltip tip={tip} />
@@ -492,13 +344,12 @@ export function RaghavDashboard({ actions }: { actions?: React.ReactNode }) {
   const recs = a.recommendations;
   const asOf = store.report.dataset?.asOfDate ?? a.analysisWeek;
   const age = Math.max(0, daysBetween(asOf, todayIst()));
-  const waiting = recs.filter((r) => store.statusOf(r.sku) === "NEEDS_REVIEW" && (r.risk !== "NONE" || r.decisionMode === "JUDGEMENT")).length;
+  const pendingRecs = recs.filter((r) => store.statusOf(r.sku) === "NEEDS_REVIEW" && (r.risk !== "NONE" || r.decisionMode === "JUDGEMENT"));
+  const waiting = pendingRecs.length;
   const placeholder = !store.uploads.skuMaster && recs.some((r) => r.economics.marginPerUnit !== null);
-  const bt = store.report.dataset ? backtest(store.report.dataset, 8) : null;
-  const festivalGap = bt?.festivalBias != null && bt.normalBias != null && bt.festivalBias - bt.normalBias > 0.1;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.01em]">{greeting()}, Raghav</h1>
@@ -522,57 +373,25 @@ export function RaghavDashboard({ actions }: { actions?: React.ReactNode }) {
 
       <Headlines recs={recs} />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <ChartCard
-          title="Stock cover against target"
-          caption="Weeks of stock at festival-adjusted demand. Shaded band = target window (6–14 weeks, 3–4 for perishables). Most urgent first; click a row to review it."
-          legend={
+      <ChartCard
+        title="Needs your decision"
+        caption={
+          pendingRecs.length
+            ? `${pendingRecs.length} SKU${pendingRecs.length === 1 ? "" : "s"} waiting, most urgent first. Bar = weeks of stock; shaded band = target (6–14 weeks, 3–4 for perishables). Click a row to decide.`
+            : "Every flagged SKU has a decision."
+        }
+        legend={
+          pendingRecs.length ? (
             <>
               <Swatch color="var(--viz-critical)" label="Below target" />
               <Swatch color="var(--viz-good)" label="Within target" />
               <Swatch color="var(--viz-warning)" label="Above target" />
               <Swatch color="" label="Target window" band />
             </>
-          }
-        >
-          <StockCoverChart recs={recs} onOpen={store.openDetail} />
-        </ChartCard>
-        <div className="grid content-start gap-4">
-          <ChartCard
-            title="₹ at stake"
-            caption="Margin lost if cover isn’t restored · cash tied up above target"
-            legend={
-              <>
-                <Swatch color="var(--viz-critical)" label="Margin at risk" />
-                <Swatch color="var(--viz-warning)" label="Cash tied up" />
-              </>
-            }
-          >
-            <MoneyChart recs={recs} onOpen={store.openDetail} />
-          </ChartCard>
-          <ChartCard title="Demand change" caption="Last 4 weeks vs 12-week average · the high-demand rule fires above +20%">
-            <DemandChart recs={recs} onOpen={store.openDetail} />
-          </ChartCard>
-        </div>
-      </div>
-
-      <ChartCard
-        title="Weekly units sold vs engine forecast"
-        caption="All SKUs. Columns = actual units sold; marker = what the engine forecast for that week."
-        legend={
-          <>
-            <Swatch color="var(--viz-actual)" label="Actual units sold" />
-            <Swatch color="var(--viz-forecast)" label="Engine forecast" line />
-          </>
+          ) : undefined
         }
       >
-        <WeeklyChart />
-        {festivalGap && (
-          <p className="mt-2 border-t border-line pt-2.5 text-[13px] text-ink-2">
-            <span className="font-semibold text-ink">Festival-week forecasts ran {pct(bt!.festivalBias!, false)} high</span>, against {Math.abs(bt!.normalBias!) < 0.02 ? "on target" : pct(bt!.normalBias!)} in
-            normal weeks. The +25% uplift may be too large for these SKUs; worth reviewing before the next festival month.
-          </p>
-        )}
+        <DecisionChart recs={pendingRecs} onOpen={store.openDetail} />
       </ChartCard>
 
       {placeholder && (

@@ -16,7 +16,7 @@ export default function OverviewPage() {
   if (!store.analysis) return <NoAnalysis />;
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 gap-5">
       {/* Raghav's dashboard first, then his decisions, then the story and the deeper analysis. */}
       <RaghavDashboard actions={<EmailDigestButton />} />
       <DecisionInbox />

@@ -32,7 +32,7 @@ export function BusinessImpact() {
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         {/* Baseline */}
         <Card>
           <CardHeader title="The problem being measured" description="Quarterly losses under the monthly, manual process (Freshroots finance baseline)" />
@@ -83,7 +83,7 @@ export function BusinessImpact() {
       <Card>
         <CardHeader title="Kill criteria" description="The kill switch watches rejections every week. Losses are measured each quarter once finance records them." />
         <div className="grid gap-px bg-line md:grid-cols-2">
-          <div className="bg-surface p-4">
+          <div className="min-w-0 bg-surface p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[13.5px] font-semibold">Losses do not decrease within two full quarters</p>
               <KillPill status={loss.status} />
@@ -93,7 +93,7 @@ export function BusinessImpact() {
             </p>
             <OutcomeForm />
           </div>
-          <div className="bg-surface p-4">
+          <div className="min-w-0 bg-surface p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[13.5px] font-semibold">Kill switch · more than 50% of a week’s recommendations rejected</p>
               <KillPill status={ks?.active ? "TRIGGERED" : (ks?.status ?? "NOT_YET_MEASURABLE")} />
@@ -252,7 +252,7 @@ export function WorkflowCompare() {
     <Card>
       <CardHeader title="Monthly + manual → weekly + automated" description="We are not replacing Raghav. We are removing the repetitive work around him." />
       <div className="grid gap-px bg-line md:grid-cols-2">
-        <div className="bg-surface p-4">
+        <div className="min-w-0 bg-surface p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-3">Before · monthly</p>
           <ol className="mt-2 flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-2">
             {old.map((s, i) => (
@@ -264,7 +264,7 @@ export function WorkflowCompare() {
           </ol>
           <p className="mt-3 text-[12.5px] text-stockout">Data reaching procurement is 3–4 weeks old.</p>
         </div>
-        <div className="bg-surface p-4">
+        <div className="min-w-0 bg-surface p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-3">Now · weekly</p>
           <ol className="mt-2 flex flex-wrap items-center gap-1.5 text-[12.5px]">
             {now.map((s, i) => (
