@@ -26,7 +26,7 @@ export default function RulesPage() {
   const fired = (code: string) => recs.filter((r) => r.triggered.some((h) => h.code === code || (code === "PERISHABLE_ABOVE" && h.code === "PERISHABLE_BELOW") || (code === "INSUFFICIENT_DATA" && h.code === "ZERO_SALES"))).length;
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5">
       <div>
         <h1 className="text-[22px] font-semibold leading-tight">Rules</h1>
         <p className="mt-0.5 max-w-3xl text-[13px] text-ink-3">

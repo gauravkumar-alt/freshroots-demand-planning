@@ -14,7 +14,7 @@ export default function OverviewPage() {
   if (!store.analysis) return <NoAnalysis />;
 
   return (
-    <div className="grid min-w-0 gap-5">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5">
       <RaghavDashboard actions={<EmailDigestButton />} />
       <DecisionInbox />
       <TrendsHighlights />

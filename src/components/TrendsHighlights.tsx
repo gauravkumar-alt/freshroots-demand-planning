@@ -28,18 +28,7 @@ export function TrendsHighlights() {
             <Sparkles className="size-4 text-ink-3" /> Trends and highlights
           </span>
         }
-        description={
-          status === "gemini"
-            ? `${note} Gemini writes the words; every number comes from the rules engine and is checked.`
-            : status === "loading"
-              ? "Asking Gemini for this week’s highlights…"
-              : `Rule-generated summary. ${note}`
-        }
-        action={
-          <span className={cn("rounded-[4px] px-1.5 py-0.5 font-mono text-[11px] font-semibold", status === "gemini" ? "bg-approved-bg text-approved" : "bg-normal-bg text-normal")}>
-            {status === "gemini" ? "GEMINI" : status === "loading" ? "…" : "RULES ONLY"}
-          </span>
-        }
+        description={status === "loading" ? "Loading this week’s highlights…" : undefined}
       />
       <ul className="divide-y divide-line">
         {items.map((h) => (

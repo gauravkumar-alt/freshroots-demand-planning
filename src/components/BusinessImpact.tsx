@@ -92,7 +92,7 @@ export function BusinessImpact() {
           </div>
           <div className="min-w-0 bg-surface p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[13.5px] font-semibold">Kill switch · more than 50% of a week’s recommendations rejected</p>
+              <p className="text-[13.5px] font-semibold">Kill switch · more than 50% of a week’s decisions rejected</p>
               <KillPill status={ks?.active ? "TRIGGERED" : (ks?.status ?? "NOT_YET_MEASURABLE")} />
             </div>
             <p className="mt-1 text-[12.5px] text-ink-3">

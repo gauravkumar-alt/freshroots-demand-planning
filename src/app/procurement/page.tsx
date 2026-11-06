@@ -9,7 +9,7 @@ export default function ProcurementPage() {
   if (!store.analysis) return <NoAnalysis />;
   const ks = store.killSwitch;
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
       <div>
         <h1 className="text-[22px] font-semibold leading-tight">Procurement</h1>
         <p className="mt-0.5 max-w-3xl text-[13px] text-ink-3">

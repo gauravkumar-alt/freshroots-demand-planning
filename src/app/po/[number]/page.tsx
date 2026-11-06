@@ -39,7 +39,7 @@ export default function PurchaseOrderPage() {
   const doc = purchaseOrderDocument(po, decision, rec);
 
   return (
-    <div className="grid min-w-0 gap-4">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <Button asChild variant="ghost" size="sm">
           <Link href="/procurement">
@@ -59,7 +59,7 @@ export default function PurchaseOrderPage() {
           </div>
           <div className="text-right">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Purchase order</p>
-            <p className="font-mono text-[18px] font-semibold">{doc.number}</p>
+            <p className="break-all font-mono text-[18px] font-semibold">{doc.number}</p>
             <p className="text-[12.5px] text-ink-2">Issued {formatDate(doc.issuedAt.slice(0, 10), { day: "numeric", month: "long", year: "numeric" })}</p>
           </div>
         </header>
@@ -73,7 +73,8 @@ export default function PurchaseOrderPage() {
           <Field label="Planning week">{doc.runId}</Field>
         </section>
 
-        <table className="mt-5 w-full text-[13.5px]">
+        <div className="mt-5 overflow-x-auto">
+        <table className="w-full min-w-[520px] text-[13.5px]">
           <thead>
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-[0.07em] text-ink-3">
               <th className="py-2 pr-3 font-semibold">SKU</th>
@@ -106,6 +107,7 @@ export default function PurchaseOrderPage() {
             </tr>
           </tfoot>
         </table>
+        </div>
 
         <section className="mt-8 grid gap-4 border-t border-line pt-5 sm:grid-cols-2">
           <Field label="Approved by">

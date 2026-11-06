@@ -327,11 +327,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const runAnalysis = React.useCallback(() => {
     if (!report.canRun || !report.dataset) return { ok: false, message: "Fix the blocking data errors on the Data page before running the analysis." };
     const a = runEngine(report.dataset, new Date().toISOString(), notes);
+    const filesKey = uploadsKey(uploads);
+    // Log a run once per week, and again only when the files behind it changed.
+    const alreadyLogged = audit.some((e) => e.runId === a.runId && e.type === "ANALYSIS_RUN") && analysisFiles === filesKey;
     setAnalysis(a);
-    setAnalysisFiles(uploadsKey(uploads));
-    void postEvents([auditEvent("ANALYSIS_RUN", a.runId, "System", `Weekly analysis: ${a.recommendations.length} SKUs from ${sourceLabel}.`, { timestamp: a.ranAt })]);
+    setAnalysisFiles(filesKey);
+    if (!alreadyLogged) void postEvents([auditEvent("ANALYSIS_RUN", a.runId, "System", `Weekly analysis: ${a.recommendations.length} SKUs from ${sourceLabel}.`, { timestamp: a.ranAt })]);
     return { ok: true, message: `Analysis complete: ${a.recommendations.length} SKUs for ${a.weekLabel}.` };
-  }, [report, notes, uploads, sourceLabel, postEvents]);
+  }, [report, notes, uploads, sourceLabel, postEvents, audit, analysisFiles]);
 
   const uploadFile = React.useCallback(async (kind: FileKind, file: File): Promise<ActionResult> => {
     try {

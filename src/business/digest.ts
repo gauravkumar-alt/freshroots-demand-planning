@@ -96,3 +96,22 @@ export function buildDigest(i: DigestInput): Digest {
 
   return { subject, html, text, waiting: waiting.length, urgent: urgent.length, marginAtRisk, cashTiedUp };
 }
+
+/**
+ * Sent instead of the digest when no new week has been uploaded since the last Monday digest,
+ * so the same summary is not repeated week after week.
+ */
+export function buildStaleReminder(i: { analysis: AnalysisResult; statusOf: (sku: string) => DecisionStatus; appUrl: string; today: string }): Digest {
+  const recs = i.analysis.recommendations;
+  const waiting = recs.filter((r) => i.statusOf(r.sku) === "NEEDS_REVIEW" && (r.risk !== "NONE" || r.decisionMode === "JUDGEMENT")).length;
+  const ageDays = Math.max(0, Math.round((Date.parse(i.today) - Date.parse(i.analysis.analysisWeek)) / 864e5));
+  const subject = `Freshroots: upload this week's files (data is ${ageDays} days old)`;
+  const link = `${i.appUrl.replace(/\/$/, "")}/data`;
+  const line = `No new sales data since the week ending ${formatDate(i.analysis.analysisWeek)}, so there is no new digest this Monday.${waiting ? ` ${waiting} decision${waiting === 1 ? " is" : "s are"} still waiting from ${i.analysis.runId}.` : ""}`;
+  const html = `<div style="font-family:system-ui,sans-serif;max-width:560px;color:#1c2420">
+    <h1 style="font-size:20px;margin:0 0 8px">Upload this week's files</h1>
+    <p style="font-size:14px;line-height:1.5;color:#48514b;margin:0 0 16px">${esc(line)}</p>
+    <a href="${esc(link)}" style="display:inline-block;background:#1c2420;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;font-size:14px">Upload files</a>
+  </div>`;
+  return { subject, html, text: `${subject}\n\n${line}\n\nUpload: ${link}`, waiting, urgent: 0, marginAtRisk: 0, cashTiedUp: 0 };
+}

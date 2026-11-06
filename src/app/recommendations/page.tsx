@@ -25,14 +25,16 @@ function RecommendationsInner() {
   };
   if (!store.analysis) return <NoAnalysis />;
   const recs = store.analysis.recommendations;
-  const pending = recs.filter((r) => store.statusOf(r.sku) === "NEEDS_REVIEW").length;
+  const waiting = recs.filter((r) => store.statusOf(r.sku) === "NEEDS_REVIEW");
+  const needYou = waiting.filter((r) => r.risk !== "NONE" || r.decisionMode === "JUDGEMENT").length;
+  const decided = recs.length - waiting.length;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
       <div>
         <h1 className="text-[22px] font-semibold leading-tight">Recommendations</h1>
         <p className="mt-0.5 text-[13px] text-ink-3">
-          {store.analysis.weekLabel} · {pending} of {recs.length} need review
+          {store.analysis.weekLabel} · {needYou} need a decision · {waiting.length - needYou} with no change · {decided} decided
         </p>
       </div>
       {filters.rule && (

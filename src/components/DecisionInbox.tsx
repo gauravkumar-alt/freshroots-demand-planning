@@ -33,11 +33,8 @@ export function DecisionInbox() {
 
   const flagged = recs.filter((r) => r.risk !== "NONE" || r.decisionMode === "JUDGEMENT");
   const pending = flagged.filter((r) => store.statusOf(r.sku) === "NEEDS_REVIEW");
-  // Routine = settled by the rules and not urgent. Urgent items (run out before delivery) always get a deliberate look.
-  const routine = recs.filter(
-    (r) => r.decisionMode === "RULE_BASED" && r.action !== "MANUAL_REVIEW" && store.statusOf(r.sku) === "NEEDS_REVIEW" && !((r.economics.stockoutGapDays ?? 0) > 0),
-  );
-  const noChange = routine.filter((r) => r.action === "NO_ACTION").length;
+  // Routine = everything waiting that is not flagged above: no risk, no judgement, nothing to change.
+  const routine = recs.filter((r) => store.statusOf(r.sku) === "NEEDS_REVIEW" && !flagged.includes(r) && r.action !== "MANUAL_REVIEW");
   const decided = flagged.length - pending.length;
   useStaggerIn(listRef, [pending.length === 0]);
 
@@ -77,7 +74,7 @@ export function DecisionInbox() {
         action={
           routine.length > 0 && (
             <Button variant="approve" size="sm" onClick={approveRoutine} disabled={busy !== null}>
-              <Check /> {busy === "all" ? "Approving…" : `Approve ${routine.length} routine${noChange ? ` (${noChange} no change)` : ""}`}
+              <Check /> {busy === "all" ? "Approving…" : `Approve ${routine.length} with no change`}
             </Button>
           )
         }

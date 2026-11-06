@@ -91,6 +91,13 @@ describe("Did it work?", () => {
 });
 
 describe("Monday digest", () => {
+  it("sends a short upload reminder instead of repeating an old week", async () => {
+    const { buildStaleReminder } = await import("@/business/digest");
+    const d = buildStaleReminder({ analysis: a, statusOf: () => "NEEDS_REVIEW", appUrl: "https://example.test", today: "2026-11-09T02:30:00Z" });
+    expect(d.subject).toBe("Freshroots: upload this week's files (data is 22 days old)");
+    expect(d.text).toContain("6 decisions are still waiting from 2026-W42");
+    expect(d.html).toContain("https://example.test/data");
+  });
   it("leads with decisions waiting, urgency and money", async () => {
     const { buildDigest } = await import("@/business/digest");
     const d = buildDigest({ analysis: a, statusOf: () => "NEEDS_REVIEW", backtest: backtest(ds, 8), appUrl: "https://example.test", placeholderFinancials: true });

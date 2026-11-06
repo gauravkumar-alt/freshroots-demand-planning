@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildDigest } from "@/business/digest";
+import { buildDigest, buildStaleReminder } from "@/business/digest";
 import { auditEvent } from "@/business/events";
 import { currentAnalysis } from "@/lib/server/analysis";
 import { env } from "@/lib/server/env";
@@ -23,7 +23,14 @@ async function send(trigger: "schedule" | "manual") {
   }
 
   const to = env.digestEmail();
-  const digest = buildDigest({ analysis, statusOf: current.statusOf, backtest: current.backtest, appUrl: env.appUrl(), placeholderFinancials: current.placeholderFinancials });
+  // A Monday digest already went out for this week's data: send a short upload reminder instead of repeating it.
+  const stale =
+    trigger === "schedule" &&
+    current.state.audit.some((e) => e.type === "DIGEST_SENT" && e.runId === analysis.runId && e.reference !== "failed" && /^(Monday digest|Upload reminder) sent/.test(e.reason));
+  const digest = stale
+    ? buildStaleReminder({ analysis, statusOf: current.statusOf, appUrl: env.appUrl(), today: new Date().toISOString() })
+    : buildDigest({ analysis, statusOf: current.statusOf, backtest: current.backtest, appUrl: env.appUrl(), placeholderFinancials: current.placeholderFinancials });
+  const label = stale ? "Upload reminder" : trigger === "schedule" ? "Monday digest" : "Requested digest";
   if (!env.resendKey() || !to) return NextResponse.json({ ok: false, error: "Email is not configured (RESEND_API_KEY and DIGEST_EMAIL or KILL_SWITCH_EMAIL)." }, { status: 503 });
 
   const res = await fetch("https://api.resend.com/emails", {
@@ -40,8 +47,8 @@ async function send(trigger: "schedule" | "manual") {
       analysis.runId,
       "System",
       ok
-        ? `${trigger === "schedule" ? "Monday" : "Requested"} digest sent to ${to}: “${digest.subject}”.`
-        : `${trigger === "schedule" ? "Monday" : "Requested"} digest failed to ${to}: ${body.message ?? "email service did not respond"}.`,
+        ? `${label} sent to ${to}: “${digest.subject}”.`
+        : `${label} failed to ${to}: ${body.message ?? "email service did not respond"}.`,
       { reference: ok ? (body.id ?? "sent") : "failed" },
     ),
   ]);
