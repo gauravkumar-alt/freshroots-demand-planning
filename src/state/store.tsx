@@ -92,7 +92,7 @@ interface Store {
   retryPo: (sku: string) => Promise<ActionResult>;
   resumeKillSwitch: (reason: string) => Promise<ActionResult>;
   retireNote: (id: string) => Promise<ActionResult>;
-  exportProcurementCsv: () => { filename: string; csv: string; count: number };
+  exportProcurementCsv: () => Promise<{ ok: true; filename: string; csv: string; count: number } | { ok: false; error: string }>;
   setOutcome: (o: QuarterOutcome) => Promise<ActionResult>;
 
   detailSku: string | null;
@@ -186,8 +186,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const postEvents = React.useCallback(
     async (entries: AuditEntry[]): Promise<ActionResult> => {
       try {
-        await api("/api/events", { method: "POST", body: JSON.stringify({ entries }) });
-        merge(entries);
+        const res = await api<{ entries?: AuditEntry[] }>("/api/events", { method: "POST", body: JSON.stringify({ entries }) });
+        merge(res.entries ?? []);
         return { ok: true };
       } catch (e) {
         return { ok: false, error: (e as Error).message };
@@ -213,8 +213,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               timestamp: a.ranAt,
               id: `${a.runId}-ANALYSIS_RUN-first`,
             });
-            await api("/api/events", { method: "POST", body: JSON.stringify({ entries: [run] }) })
-              .then(() => setAudit((l) => [run, ...l]))
+            await api<{ entries?: AuditEntry[] }>("/api/events", { method: "POST", body: JSON.stringify({ entries: [run] }) })
+              .then((res) => merge(res.entries ?? []))
               .catch(() => {});
           }
         }
@@ -463,41 +463,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const exportProcurementCsv = React.useCallback(() => {
-    const runId = analysis?.runId ?? "run";
-    const csv = toCsv(
-      ["Run", "SKU", "Product", "Category", "Lead distributor", "Action", "Approved quantity", "System quantity", "Decision", "Approved by", "Approved at (IST)", "Reason", "Zoho PO"],
-      procurement.map(({ rec, entry, po }) => [
-        runId,
-        rec.sku,
-        rec.product,
-        rec.category,
-        rec.leadDistributor ?? "",
-        ACTION_LABEL[entry.finalAction!],
-        entry.finalQty ?? 0,
-        rec.suggestedQty ?? "",
-        entry.type === "EDITED" ? "Edited" : "Approved",
-        entry.user,
-        formatTime(entry.timestamp, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }),
-        entry.reason || "As recommended",
-        po.kind === "CREATED" ? po.poNumber : po.kind === "NOT_NEEDED" ? "Not needed" : po.kind === "HELD" ? "Held by kill switch" : po.kind === "FAILED" ? "Failed" : "Pending",
-      ]),
-    );
-    if (analysis) {
-      void postEvents([
-        auditEvent(
-          "EXPORT",
-          runId,
-          REVIEWER,
-          `Exported ${procurement.length} approved order${procurement.length === 1 ? "" : "s"} as CSV (${procurement
-            .slice(0, 3)
-            .map((p) => `${p.rec.sku} ${shortDistributor(p.rec.leadDistributor)}`)
-            .join(", ")}${procurement.length > 3 ? "…" : ""}).`,
-        ),
-      ]);
+  /** Built on the server from the database, so it includes every approval, not just the ones this browser has seen. */
+  const exportProcurementCsv = React.useCallback(async () => {
+    try {
+      const res = await api<{ filename: string; csv: string; count: number; entry: AuditEntry }>("/api/export", { method: "POST" });
+      merge([res.entry]);
+      return { ok: true as const, filename: res.filename, csv: res.csv, count: res.count };
+    } catch (e) {
+      return { ok: false as const, error: (e as Error).message };
     }
-    return { filename: `freshroots-approved-orders-${runId}.csv`, csv, count: procurement.length };
-  }, [analysis, procurement, postEvents]);
+  }, [merge]);
 
   const setOutcome = React.useCallback(async (o: QuarterOutcome): Promise<ActionResult> => {
     try {

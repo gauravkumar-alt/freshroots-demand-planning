@@ -22,10 +22,11 @@ export function ProcurementQueue() {
   const halted = !!store.killSwitch?.active;
   const retryable = reorders.filter((i) => i.po.kind === "HELD" || i.po.kind === "FAILED");
 
-  const exportCsv = () => {
-    const { filename, csv, count } = store.exportProcurementCsv();
-    downloadText(filename, csv);
-    store.notify(`${filename} downloaded with ${count} approved order${count === 1 ? "" : "s"}.`);
+  const exportCsv = async () => {
+    const res = await store.exportProcurementCsv();
+    if (!res.ok) return store.notify(res.error);
+    downloadText(res.filename, res.csv);
+    store.notify(`${res.filename} downloaded with ${res.count} approved order${res.count === 1 ? "" : "s"}.`);
   };
 
   return (

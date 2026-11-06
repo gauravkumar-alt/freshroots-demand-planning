@@ -22,20 +22,16 @@ export default function OverviewPage() {
       <DecisionInbox />
       <TrendsHighlights />
 
-      <details className="group rounded-md border border-line bg-surface">
-        <summary className="cursor-pointer list-none px-4 py-3 text-[14px] font-semibold marker:hidden">
-          <span className="mr-1.5 inline-block transition-transform group-open:rotate-90">›</span> Analysis: rule coverage, business impact, kill criteria
-        </summary>
-        <div className="grid gap-5 border-t border-line p-4">
-          <KPIGrid />
-          <AutomationSplit />
-          <section id="impact" className="grid scroll-mt-4 gap-3">
-            <h2 className="text-[16px] font-semibold">Business impact and kill criteria</h2>
-            <BusinessImpact />
-          </section>
-          <WorkflowCompare />
-        </div>
-      </details>
+      <section className="grid gap-3">
+        <h2 className="text-[16px] font-semibold">This week at a glance</h2>
+        <KPIGrid />
+        <AutomationSplit />
+      </section>
+      <section id="impact" className="grid scroll-mt-4 gap-3">
+        <h2 className="text-[16px] font-semibold">Business impact and kill criteria</h2>
+        <BusinessImpact />
+      </section>
+      <WorkflowCompare />
     </div>
   );
 }
