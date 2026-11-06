@@ -71,16 +71,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="block text-[11.5px] text-ink-3">Demand planning assistant</span>
               </span>
             </Link>
-            <div className="lg:mt-4">
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-[4px] border px-2 py-1 font-mono text-[11px] font-semibold tracking-[0.08em]",
-                  store.dataLabel === "UPLOADED DATA" ? "border-approved/40 bg-approved-bg text-approved" : "border-line-2 bg-sunken text-ink-2",
-                )}
-              >
-                {store.dataLabel}
-              </span>
-            </div>
           </div>
 
           <nav className="flex gap-1 overflow-x-auto px-3 pb-2 lg:mt-2 lg:flex-col lg:overflow-visible lg:pb-0">
