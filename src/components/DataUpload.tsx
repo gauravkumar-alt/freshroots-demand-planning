@@ -26,6 +26,8 @@ function Slot({ kind }: { kind: FileKind }) {
   const spec = FILE_SPECS[kind];
   const up = store.uploads[kind];
   const rep = store.report.files.find((f) => f.kind === kind)!;
+  // Checks run in the background; a card only says something when its file has a problem.
+  const errors = store.report.issues.filter((i) => i.file === kind && i.severity === "error");
   const input = React.useRef<HTMLInputElement>(null);
   const [drag, setDrag] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -67,18 +69,24 @@ function Slot({ kind }: { kind: FileKind }) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-3">{spec.system}</p>
           <p className="text-[14px] font-semibold">{spec.label}</p>
         </div>
-        <span className={cn("rounded-[4px] px-1.5 py-0.5 text-[11px] font-semibold", !ok ? "bg-rejected-bg text-rejected" : up ? "bg-approved-bg text-approved" : !rep.provided ? "bg-normal-bg text-normal" : "bg-review-bg text-review")}>
-          {!ok ? "Blocked" : up ? "Uploaded" : !rep.provided ? "Optional" : "Loaded"}
+        <span className={cn("rounded-[4px] px-1.5 py-0.5 text-[11px] font-semibold", !ok ? "bg-rejected-bg text-rejected" : errors.length ? "bg-review-bg text-review" : up ? "bg-approved-bg text-approved" : !rep.provided ? "bg-normal-bg text-normal" : "bg-review-bg text-review")}>
+          {!ok ? "Blocked" : errors.length ? "Rows skipped" : up ? "Uploaded" : !rep.provided ? "Optional" : "Loaded"}
         </span>
       </div>
       <p className="mt-1.5 truncate text-[12.5px] text-ink-2" title={up?.name}>
         {up ? `${up.name} · ${formatTime(up.uploadedAt)}` : FRESHROOTS_FILE_NAMES[kind] ? FRESHROOTS_FILE_NAMES[kind]! : "Not provided"}
       </p>
-      <p className="mt-0.5 text-[12.5px] tnum">
-        <span className="font-semibold">{rep.rowsAccepted.toLocaleString("en-IN")}</span>
-        <span className="text-ink-3"> of {rep.rowsRead.toLocaleString("en-IN")} rows accepted</span>
-      </p>
-      <p className="mt-1.5 text-[11.5px] leading-snug text-ink-3">Columns: {spec.columns.map((c) => c.label + (c.required ? "" : " (optional)")).join(", ")}</p>
+      {errors.length > 0 && (
+        <div className="mt-2 rounded-[4px] bg-rejected-bg px-2.5 py-2 text-[12px] leading-snug text-rejected">
+          <ul className="grid gap-0.5">
+            {errors.slice(0, 3).map((e, i) => (
+              <li key={i}>{e.message}</li>
+            ))}
+          </ul>
+          {errors.length > 3 && <p className="mt-0.5 font-medium">and {errors.length - 3} more. Fix the file and upload it again.</p>}
+          {rep.missingColumns.length > 0 && <p className="mt-1 text-ink-2">Expected columns: {spec.columns.filter((c) => c.required).map((c) => c.label).join(", ")}</p>}
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-1.5 pt-1">
         <input ref={input} type="file" accept=".csv,text/csv" className="hidden" id={`file-${kind}`} onChange={(e) => (take(e.target.files?.[0]), (e.target.value = ""))} />
         <Button size="sm" variant="secondary" disabled={busy} onClick={() => input.current?.click()}>
