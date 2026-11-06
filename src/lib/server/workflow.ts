@@ -4,6 +4,7 @@ import "server-only";
 import { REVIEWER } from "@/business/config";
 import { decide, effectiveDecisions, type DecisionInput } from "@/business/decisions";
 import { auditEvent } from "@/business/events";
+import { productName } from "@/business/format";
 import { killSwitchState } from "@/business/measurement";
 import type { AuditEntry, Recommendation } from "@/business/types";
 import { purchaseOrderRequest, type PurchaseOrderRequest, type PurchaseOrderResult } from "@/business/purchaseOrder";
@@ -86,7 +87,7 @@ export async function recordDecisions(repo: Repo, ctx: RunContext, items: Decisi
         check: ks.check,
         weekLabel: ctx.weekLabel,
         heldPos: standing.filter((e) => e.type !== "REJECTED" && isReorder(e)).length,
-        recentRejections: standing.filter((e) => e.type === "REJECTED").map((e) => ({ sku: e.sku!, product: e.product ?? "", reason: e.reason })),
+        recentRejections: standing.filter((e) => e.type === "REJECTED").map((e) => ({ sku: e.sku!, product: productName(e.product ?? ""), reason: e.reason })),
       });
       const msg = email.ok
         ? email.mode === "live"

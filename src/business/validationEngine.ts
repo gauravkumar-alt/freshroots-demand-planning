@@ -1,5 +1,6 @@
 import type { CsvRecord } from "./csv";
 import { addDays, standardiseDate, toDate, weekEnding } from "./dates";
+import { productName } from "./format";
 import { RULES } from "./rulesConfig";
 import type {
   Perishability,
@@ -289,7 +290,7 @@ export function validateAndPrepare(files: Partial<Record<FileKind, RawFile>>): V
     }
     const row_: SkuMasterRow = {
       sku: id,
-      product: get("product"),
+      product: productName(get("product")),
       category: get("category"),
       perishability: per,
       standardOrderQty: soq,
@@ -331,7 +332,7 @@ export function validateAndPrepare(files: Partial<Record<FileKind, RawFile>>): V
       return false;
     }
     salesSeen.add(key);
-    clean.sales.push({ sku: id, product: get("product"), distributor, week, units: u });
+    clean.sales.push({ sku: id, product: productName(get("product")), distributor, week, units: u });
     return true;
   });
 

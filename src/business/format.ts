@@ -1,5 +1,10 @@
 // Number formatting shared by the engine's explanations and the UI (Indian digit grouping).
 
+/** Product names without the company brand in front: "Freshroots Peanut Butter 300g" → "Peanut Butter 300g". */
+export function productName(name: string): string {
+  return name.replace(/^Freshroots\s+/i, "").trim() || name;
+}
+
 export function units(n: number): string {
   return Math.round(n).toLocaleString("en-IN");
 }

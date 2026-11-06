@@ -4,7 +4,9 @@
 // in Supabase; this store loads it, keeps it fresh, and derives statuses from the audit log.
 // The analysis itself runs in the browser from the current files: it is deterministic and needs no server.
 
+import { productName } from "@/business/format";
 import { poNumberOf, withRaisedPurchaseOrders } from "@/business/purchaseOrder";
+
 import * as React from "react";
 import { REVIEWER } from "@/business/config";
 import { parseCsv, toCsv } from "@/business/csv";
@@ -18,6 +20,9 @@ import type { AnalysisResult, AuditEntry, DecisionStatus, QuarterOutcome, Recomm
 import { validateAndPrepare, type FileKind, type RawFile, type ValidationReport } from "@/business/validationEngine";
 import { freshrootsRawFiles } from "@/data/freshrootsFiles";
 import { formatTime, shortDistributor } from "@/lib/utils";
+
+/** Older audit entries were saved with the brand in front of the product name. */
+const tidy = (e: AuditEntry): AuditEntry => (e.product ? { ...e, product: productName(e.product) } : e);
 
 const REFRESH_MS = 30_000;
 
@@ -167,17 +172,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     window.setTimeout(() => setToast((t) => (t === message ? null : t)), 3200);
   }, []);
 
-  /** Adds entries the server confirmed, without duplicating ones already loaded. */
+    /** Adds entries the server confirmed, without duplicating ones already loaded. */
   const merge = React.useCallback((entries: AuditEntry[]) => {
     setAudit((list) => {
       const ids = new Set(list.map((e) => e.id));
-      return [...list, ...entries.filter((e) => !ids.has(e.id))].sort(byTimeDesc);
+      return [...list, ...entries.filter((e) => !ids.has(e.id)).map(tidy)].sort(byTimeDesc);
     });
   }, []);
 
   const applyShared = React.useCallback((s: SharedState) => {
     setStorage(s.storage);
-    setAudit([...s.audit].sort(byTimeDesc));
+    setAudit(s.audit.map(tidy).sort(byTimeDesc));
     setUploads(s.uploads);
     setRetiredNotes(s.retiredNotes);
     setOutcomes(s.outcomes);
